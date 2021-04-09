@@ -196,12 +196,6 @@ enum KEYS
     CK_CTRL_PGDN,
     CK_CTRL_TAB,
 
-#ifdef TOUCH_UI
-    // extra numpad keys for zoom
-    CK_NUMPAD_PLUS,
-    CK_NUMPAD_MINUS,
-#endif
-
 // ugly...
 // TODO: should crawl just use one of these internally and convert?
 #ifdef USE_TILE_LOCAL
