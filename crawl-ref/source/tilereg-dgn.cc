@@ -342,7 +342,7 @@ int DungeonRegion::handle_mouse(wm_mouse_event &event)
 
 #ifdef TOUCH_UI
     if (event.event == wm_mouse_event::WHEEL && (event.mod & TILES_MOD_CTRL))
-        zoom(event.button == wm_mouse_event::SCROLL_UP);
+        tiles.zoom_dungeon(event.button == wm_mouse_event::SCROLL_UP);
 #endif
 
     if (mouse_control::current_mode() == MOUSE_MODE_NORMAL

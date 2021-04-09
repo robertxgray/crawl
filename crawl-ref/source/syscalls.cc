@@ -28,6 +28,7 @@
 #include "unicode.h"
 
 #ifdef __ANDROID__
+#define HAVE_STAT
 #include <errno.h>
 
 #include <android/asset_manager.h>

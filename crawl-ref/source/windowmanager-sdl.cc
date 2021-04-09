@@ -364,13 +364,16 @@ int SDLWrapper::init(coord_def *m_windowsz)
         return false;
     }
 
+    int cur_display;
+#ifdef __ANDROID__
+    cur_display = 0;
+#else
     // find the current display, based on the mouse position
     // TODO: probably want to allow configuring this?
     int mouse_x, mouse_y;
     SDL_GetGlobalMouseState(&mouse_x, &mouse_y);
 
     int displays = SDL_GetNumVideoDisplays();
-    int cur_display;
     for (cur_display = 0; cur_display < displays; cur_display++)
     {
         SDL_Rect bounds;
@@ -383,6 +386,7 @@ int SDLWrapper::init(coord_def *m_windowsz)
     }
     if (cur_display >= displays)
         cur_display = 0; // can this happen?
+#endif
 
     SDL_DisplayMode display_mode;
     SDL_GetDesktopDisplayMode(cur_display, &display_mode);
