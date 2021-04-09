@@ -431,8 +431,7 @@ static vector<string> _get_base_dirs()
         SysEnv.crawl_base + "../Resources/",
 #endif
 #ifdef __ANDROID__
-        ANDROID_ASSETS,
-        "/sdcard/Android/data/org.develz.crawl/files/",
+        ANDROID_ASSETS
 #endif
     };
 
@@ -548,9 +547,6 @@ string datafile_path(string basename, bool croak_on_fail, bool test_base_path,
     for (const string &basedir : _get_base_dirs())
     {
         string name = basedir + basename;
-#ifdef __ANDROID__
-        __android_log_print(ANDROID_LOG_INFO,"Crawl","Looking for %s as '%s'",basename.c_str(),name.c_str());
-#endif
         if (thing_exists(name))
             return name;
     }
@@ -2406,6 +2402,14 @@ void save_game(bool leave_game, const char *farewellmsg)
     // If just save, early out.
     if (!leave_game)
     {
+#ifdef __ANDROID__
+        // Save everything before pause
+        clua.save_persist();
+        if (crawl_state.unsaved_macros)
+            macro_save();
+        if (!you.entering_level)
+            _save_level(level_id::current());
+#endif
         if (!crawl_state.disables[DIS_SAVE_CHECKPOINTS])
             you.save->commit();
         return;

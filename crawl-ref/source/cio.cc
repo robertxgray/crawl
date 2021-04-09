@@ -19,9 +19,6 @@
 #include "tiles-build-specific.h"
 #include "unicode.h"
 #include "viewgeom.h"
-#if defined(USE_TILE_LOCAL) && defined(TOUCH_UI)
-#include "windowmanager.h"
-#endif
 #ifdef USE_TILE_LOCAL
 #include "tilefont.h"
 #endif
@@ -618,11 +615,6 @@ int line_reader::read_line(bool clear_previous, bool reset_cursor)
     if (clear_previous)
         *buffer = 0;
 
-#if defined(USE_TILE_LOCAL) && defined(TOUCH_UI)
-    if (wm)
-        wm->show_keyboard();
-#endif
-
 #ifdef USE_TILE_WEB
     tiles.redraw();
     tiles.json_open_object();
@@ -989,11 +981,6 @@ int fontbuf_line_reader::read_line(bool clear_previous, bool reset_cursor)
 
     if (clear_previous)
         *buffer = 0;
-
-#if defined(USE_TILE_LOCAL) && defined(TOUCH_UI)
-    if (wm)
-        wm->show_keyboard();
-#endif
 
     cursor_control con(true);
 
