@@ -575,7 +575,7 @@ ifdef ANDROID
   TOUCH_UI=Y
   TILES=Y
   SOUND=Y
-  SAVEDIR="/sdcard/Android/data/org.develz.crawl/saves/"
+  SAVEDIR=
 else
 
 ifndef BUILD_LUA
@@ -1433,7 +1433,7 @@ endif
 ifdef ANDROID
   # during build, data goes in a different directory to when crawl runs!
   prefix_fp = ..
-  datadir_fp = android-project/assets
+  datadir_fp = android-project/app/src/main/assets
   savedir_fp =
   shareddir_fp =
 endif
@@ -1548,8 +1548,7 @@ clean-contrib:
 clean-android:
 ifneq ($(ANDROID),)
 	$(RM) -r $(datadir_fp)
-	+cd android-project && ant clean && ndk-build -$(MAKEFLAGS) clean \
-	 && remove AndroidManifest.xml
+	+cd android-project && ./gradlew app:clean && rm app/build.gradle
 endif
 
 distclean: clean clean-contrib clean-rltiles
@@ -1913,17 +1912,17 @@ mac-app-console: all
 # Building the Android package
 #
 
-android-project/AndroidManifest.xml: android-project/AndroidManifest.xml.in
-	sed "s/@CRAWL_VERSION@/${SRC_VERSION}/" <android-project/AndroidManifest.xml.in >android-project/AndroidManifest.xml
+android-project/app/build.gradle: android-project/app/build.gradle.in
+	sed "s/@CRAWL_VERSION@/${SRC_VERSION}/" <android-project/app/build.gradle.in >android-project/app/build.gradle
 
-android: install-data .android-cflags android-project/AndroidManifest.xml
+android: install-data .android-cflags android-project/app/build.gradle
 ifeq ($(ANDROID),)
 	@echo Please define ANDROID to use this build.
 	@exit 1
 endif
-	+cd android-project && ndk-build -$(MAKEFLAGS) && ant debug && \
-	cp bin/DungeonCrawlStoneSoup-debug.apk \
-	../../../crawl_tiles_android-$(SRC_VERSION).apk
+	+cd android-project && ./gradlew app:assembleDebug && \
+	cp app/build/outputs/apk/debug/app-debug.apk \
+	../../../crawl_tiles_android_debug-$(SRC_VERSION).apk
 
 #############################################################################
 # Canned tests

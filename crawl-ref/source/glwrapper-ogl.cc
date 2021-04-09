@@ -71,8 +71,10 @@ namespace opengl
             return "GL_INVALID_VALUE";
         case GL_INVALID_OPERATION:
             return "GL_INVALID_OPERATION";
+#ifndef __ANDROID__
         case GL_INVALID_FRAMEBUFFER_OPERATION:
             return "GL_INVALID_FRAMEBUFFER_OPERATION";
+#endif
         case GL_OUT_OF_MEMORY:
             return "GL_OUT_OF_MEMORY (fatal)";
         case GL_STACK_UNDERFLOW:

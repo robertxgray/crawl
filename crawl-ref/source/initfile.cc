@@ -78,8 +78,6 @@
 #endif
 #include "tiles-build-specific.h"
 
-
-
 // For finding the executable's path
 #ifdef TARGET_OS_WINDOWS
 #define WIN32_LEAN_AND_MEAN
@@ -94,6 +92,11 @@ extern char **NXArgv;
 #elif defined(UNIX) || defined(TARGET_COMPILER_MINGW)
 #include <unistd.h>
 #endif
+
+#ifdef __ANDROID__
+#include "SDL_system.h"
+#endif
+
 
 const string game_options::interrupt_prefix = "interrupt_";
 system_environment SysEnv;
@@ -3939,6 +3942,11 @@ void get_system_environment()
 #ifdef SAVE_DIR_PATH
     if (SysEnv.crawl_dir.empty())
         SysEnv.crawl_dir = SAVE_DIR_PATH;
+#endif
+
+#ifdef __ANDROID__
+    if (SysEnv.crawl_dir.empty())
+        SysEnv.crawl_dir = SDL_AndroidGetExternalStoragePath();
 #endif
 
 #ifdef DGL_SIMPLE_MESSAGING
