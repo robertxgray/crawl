@@ -64,7 +64,6 @@
 #                     relative to prefix or absolute.
 #
 #    ANDROID       -- perform an Android build (see docs/develop/android.txt)
-#    TOUCH_UI      -- enable UI behaviour more compatible with touch-screens
 #
 #
 # Requirements:
@@ -572,7 +571,6 @@ ifdef ANDROID
   COPY_FONTS = yes
   NO_PKGCONFIG=Y
   GLES=Y
-  TOUCH_UI=Y
   TILES=Y
   SOUND=Y
   SAVEDIR=
@@ -665,10 +663,6 @@ ifdef TILES
 
 DEFINES_L += -DUSE_TILE
 DEFINES_L += -DUSE_TILE_LOCAL
-
-ifdef TOUCH_UI
-DEFINES_L += -DTOUCH_UI
-endif
 
 ifdef BUILD_SDL2
 INCLUDES_L += -isystem contrib/install/$(ARCH)/include/SDL2

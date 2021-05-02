@@ -944,8 +944,9 @@ static void _show_startup_menu(newgame_def& ng_choice,
 {
     unwind_bool no_more(crawl_state.show_more_prompt, false);
 
-#if defined(USE_TILE_LOCAL) && defined(TOUCH_UI)
+#if defined(USE_TILE_LOCAL) && defined(__ANDROID__)
     wm->show_keyboard();
+	sleep(1); // wait for animation
 #elif defined(USE_TILE_WEB)
     tiles_crt_popup show_as_popup;
 #endif

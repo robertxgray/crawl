@@ -30,7 +30,6 @@
 #ifdef __ANDROID__
 #define HAVE_STAT
 #include <errno.h>
-
 #include <android/asset_manager.h>
 #include <android/asset_manager_jni.h>
 #include <jni.h>
@@ -41,6 +40,14 @@ extern "C"
 }
 
 AAssetManager *_android_asset_manager = nullptr; // XXX
+
+// Used to save the game on SDLActivity.onPause
+extern "C" JNIEXPORT void JNICALL
+Java_org_libsdl_app_SDLActivity_nativeSaveGame(
+    JNIEnv* env, jclass thiz)
+{
+    save_game(false);
+}
 #endif
 
 bool lock_file(int fd, bool write, bool wait)

@@ -766,11 +766,6 @@ static void _print_stats_mp(int x, int y)
     for (int i = 11-col; i > 0; i--)
         CPRINTF(" ");
 
-#ifdef TOUCH_UI
-    if (tiles.is_using_small_layout())
-        MP_Bar.vdraw(6, 10, you.magic_points, you.max_magic_points);
-    else
-#endif
     MP_Bar.draw(19, y, you.magic_points, you.max_magic_points);
 
     you.redraw_magic_points = false;

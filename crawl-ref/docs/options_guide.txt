@@ -1060,8 +1060,6 @@ ability_menu = true
         Always show the full-screen 'a'bility menu. If false, 'a' prompts
         in the message area, and the menu can be seen with '?' or '*'.
 
-        Setting this option to false has no effect in Android tiles builds.
-
 easy_floor_use = true
         If set to true, item interaction menus that allow using items from the
         ground will respond to switching from inventory items to floor items by

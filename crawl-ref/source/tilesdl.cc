@@ -50,23 +50,14 @@
 #include "view.h"
 #include "windowmanager.h"
 
-#ifdef __ANDROID__
-#include <android/log.h>
-#include <GLES/gl.h>
-//#include <SDL_android.h>
-#endif
-
 #ifdef TARGET_OS_WINDOWS
 # include <windows.h>
 #endif
 
 // Default Screen Settings
 // width, height, map, crt, stat, msg, tip, lbl
-#ifdef TOUCH_UI
-static int _screen_sizes[6][8] =
-#else
+#ifndef __ANDROID__
 static int _screen_sizes[4][8] =
-#endif
 {
     // Default
     {1024, 700, 3, 15, 16, 14, 15, 14},
@@ -76,12 +67,19 @@ static int _screen_sizes[4][8] =
     {800, 600, 2, 14, 11, 12, 13, 12},
     // Eee PC
     {800, 480, 2, 13, 12, 10, 13, 11}
-#ifdef TOUCH_UI
-    // puny mobile screens
-    ,{480, 320, 2, 9, 8, 8, 9, 8}
-    ,{320, 240, 1, 8, 8, 6, 8, 6} // :(
-#endif
 };
+#else
+// Extra values for viewport and map scale
+static int _screen_sizes[6][10] =
+{
+    {960, 768, 2, 17, 15, 17, 17, 15, 110, 70},
+    {800, 640, 2, 15, 13, 15, 15, 13, 100, 60},
+    {720, 576, 2, 13, 11, 13, 13, 11, 90, 50},
+    {640, 512, 1, 12, 10, 12, 12, 10, 80, 40},
+    {540, 432, 1, 10, 8, 10, 10, 8, 70, 30},
+    {480, 384, 1, 9, 7, 9, 9, 7, 60, 20}
+};
+#endif
 
 HiDPIState display_density(1,1,1);
 
@@ -272,8 +270,18 @@ void TilesFramework::calculate_default_options()
     int num_screen_sizes = ARRAYSZ(_screen_sizes);
     do
     {
+#ifndef __ANDROID__
         if (m_windowsz.x >= _screen_sizes[auto_size][0]
             && m_windowsz.y >= _screen_sizes[auto_size][1])
+#else
+        int adjust_scale = 1;
+        if (Options.game_scale == min(m_windowsz.x, m_windowsz.y)/1080+1)
+        {
+            adjust_scale = Options.game_scale;
+        }
+        if (m_windowsz.x >= (_screen_sizes[auto_size][0]*adjust_scale)
+            && m_windowsz.y >= (_screen_sizes[auto_size][1])*adjust_scale)
+#endif
         {
             break;
         }
@@ -290,6 +298,10 @@ void TilesFramework::calculate_default_options()
     AUTO(Options.tile_font_tip_size, 6);
     AUTO(Options.tile_font_lbl_size, 7);
 #undef AUTO
+#ifdef __ANDROID__
+    Options.tile_viewport_scale = _screen_sizes[auto_size][8];
+    Options.tile_map_scale = _screen_sizes[auto_size][9];
+#endif
 
     m_tab_margin = Options.tile_font_lbl_size + 4;
 }
@@ -302,9 +314,7 @@ bool TilesFramework::initialise()
 
     const char *icon_name =
 #ifdef DATA_DIR_PATH
-#ifndef __ANDROID__
     DATA_DIR_PATH
-#endif
 #endif
     "dat/tiles/stone_soup_icon-512x512.png";
 
@@ -379,20 +389,6 @@ bool TilesFramework::initialise()
                                          ARRAYSZ(ct_map_commands),
                                          "Navigation", "Navigate around map");
 
-#ifdef TOUCH_UI
-    if (tiles.is_using_small_layout())
-        m_region_tab->push_tab_button(CMD_EXPLORE, TILEG_CMD_EXPLORE);
-    TAB_ITEM    = m_region_tab->push_tab_region(m_region_inv, TILEG_TAB_ITEM);
-    TAB_SPELL   = m_region_tab->push_tab_region(m_region_spl, TILEG_TAB_SPELL);
-    TAB_ABILITY = m_region_tab->push_tab_region(m_region_abl, TILEG_TAB_ABILITY);
-    m_region_tab->push_tab_region(m_region_mon, TILEG_TAB_MONSTER);
-    TAB_COMMAND = m_region_tab->push_tab_region(m_region_cmd, TILEG_TAB_COMMAND);
-    m_region_tab->push_tab_region(m_region_cmd_meta,
-                                  TILEG_TAB_COMMAND2);
-    TAB_NAVIGATION = m_region_tab->push_tab_region(m_region_cmd_map,
-                                  TILEG_TAB_NAVIGATION);
-    m_region_tab->activate_tab(TAB_COMMAND);
-#else
     TAB_ITEM    = m_region_tab->push_tab_region(m_region_inv, TILEG_TAB_ITEM);
     TAB_SPELL   = m_region_tab->push_tab_region(m_region_spl, TILEG_TAB_SPELL);
     m_region_tab->push_tab_region(m_region_mem, TILEG_TAB_MEMORISE);
@@ -405,7 +401,6 @@ bool TilesFramework::initialise()
     TAB_NAVIGATION = m_region_tab->push_tab_region(m_region_cmd_map,
                                                    TILEG_TAB_NAVIGATION);
     m_region_tab->activate_tab(TAB_ITEM);
-#endif
 
     m_region_msg  = new MessageRegion(m_msg_font);
     m_region_stat = new StatRegion(m_stat_font);
@@ -625,34 +620,6 @@ int TilesFramework::getch_ck()
             switch (event.type)
             {
             case WME_ACTIVEEVENT:
-#ifdef __ANDROID__
-                // short-term: when crawl is 'iconified' in android,
-                // close it
-                if (/*event.active.state == 0x04 SDL_APPACTIVE &&*/ event.active.gain == 0)
-                {
-                    crawl_state.seen_hups++;
-                    return ESCAPE;
-                }
-                // long-term pseudo-code:
-                /*
-                if (event.active.state == SDL_APPACTIVE)
-                {
-                    if (event.active.gain == 0)
-                    {
-                        if (crawl_state.need_save)
-                            save_game(true);
-                        do_no_SDL_or_GL_calls();
-                    }
-                    else
-                    {
-                        reload_gl_textures();
-                        reset_gl_state();
-                        wm->set_mod_state(TILES_MOD_NONE);
-                        set_need_redraw();
-                    }
-                }
-                 */
-#else
                 // When game gains focus back then set mod state clean
                 // to get rid of stupid Windows/SDL bug with Alt-Tab.
                 if (event.active.gain != 0)
@@ -660,7 +627,6 @@ int TilesFramework::getch_ck()
                     wm->set_mod_state(TILES_MOD_NONE);
                     set_need_redraw();
                 }
-#endif
                 break;
             case WME_KEYDOWN:
                 key        = event.key.keysym.sym;
@@ -1029,23 +995,7 @@ void TilesFramework::do_layout()
 
 bool TilesFramework::is_using_small_layout()
 {
-    // automatically use small layout at low resolutions if TOUCH_UI enabled,
-    // otherwise only if forced to
-#ifdef TOUCH_UI
-    switch (Options.tile_use_small_layout)
-    {
-    case MB_TRUE:
-        return true;
-    case MB_FALSE:
-        return false;
-    case MB_MAYBE:
-    default:
-        Options.tile_use_small_layout = (m_windowsz.x<=480) ? MB_TRUE : MB_FALSE;
-        return Options.tile_use_small_layout == MB_TRUE;
-    }
-#else
     return Options.tile_use_small_layout == MB_TRUE;
-#endif
 }
 
 #define ZOOM_INC 10
@@ -1379,10 +1329,6 @@ void TilesFramework::redraw()
                 formatted_string(m_tooltip), min_pos, max_pos);
     }
     wm->swap_buffers();
-
-#ifdef __ANDROID__
-    glmanager->fixup_gl_state();
-#endif
 
     m_last_tick_redraw = wm->get_ticks();
 }

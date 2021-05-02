@@ -117,14 +117,6 @@ static bool _first_greater(const pair<int, int> &l, const pair<int, int> &r)
 
 const vector<GameOption*> game_options::build_options_list()
 {
-#ifndef DEBUG
-    const bool USING_TOUCH =
-#if defined(TOUCH_UI)
-        true;
-#else
-        false;
-#endif
-#endif
     const bool USING_DGL =
 #if defined(DGAMELAUNCH)
         true;
@@ -204,8 +196,6 @@ const vector<GameOption*> game_options::build_options_list()
         new BoolGameOption(SIMPLE_NAME(clear_messages), false),
 #ifdef DEBUG
         new BoolGameOption(SIMPLE_NAME(show_more), false),
-#else
-        new BoolGameOption(SIMPLE_NAME(show_more), !USING_TOUCH),
 #endif
         new BoolGameOption(SIMPLE_NAME(small_more), false),
         new BoolGameOption(SIMPLE_NAME(pickup_thrown), true),
@@ -378,16 +368,13 @@ const vector<GameOption*> game_options::build_options_list()
         new TileColGameOption(SIMPLE_NAME(tile_water_col), "#114455"),
         new TileColGameOption(SIMPLE_NAME(tile_window_col), "#558855"),
         new ListGameOption<string>(SIMPLE_NAME(tile_layout_priority),
-#ifdef TOUCH_UI
-            split_string(",", "minimap, command, inventory, "
-                              "command2, spell, ability, monster")),
-#else
             split_string(",", "minimap, inventory, command, "
                               "spell, ability, monster")),
 #endif
-#endif
 #ifdef USE_TILE_LOCAL
+# ifndef __ANDROID__
         new IntGameOption(SIMPLE_NAME(game_scale), 1, 1, 8),
+# endif
         new IntGameOption(SIMPLE_NAME(tile_key_repeat_delay), 200, 0, INT_MAX),
         new IntGameOption(SIMPLE_NAME(tile_window_width), -90, INT_MIN, INT_MAX),
         new IntGameOption(SIMPLE_NAME(tile_window_height), -90, INT_MIN, INT_MAX),
@@ -1177,6 +1164,7 @@ void game_options::reset_options()
     tile_shield_offsets.second = INT_MAX;
     tile_viewport_scale = 100;
     tile_map_scale      = 60;
+
 #endif
 
 #ifdef USE_TILE_WEB
@@ -3508,10 +3496,6 @@ void game_options::read_option_line(const string &str, bool runscript)
             tile_full_screen = SCREENMODE_AUTO;
     }
 #endif // USE_TILE_LOCAL
-#ifdef TOUCH_UI
-    else if (key == "tile_use_small_layout")
-        tile_use_small_layout = read_maybe_bool(field);
-#endif
     else if (key == "tile_show_player_species" && field == "true")
     {
         field = "playermons";
