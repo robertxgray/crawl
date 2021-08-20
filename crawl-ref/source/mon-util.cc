@@ -339,6 +339,9 @@ static resists_t _apply_holiness_resists(resists_t resists, mon_holy_type mh)
     if (!(mh & MH_NATURAL))
         resists = (resists & ~(MR_RES_NEG * 7)) | (MR_RES_NEG * 3);
 
+    if (mh & (MH_UNDEAD | MH_DEMONIC | MH_PLANT | MH_NONLIVING))
+        resists |= MR_RES_TORMENT;
+
     return resists;
 }
 
@@ -2016,7 +2019,7 @@ mon_attack_def mons_attack_spec(const monster& m, int attk_number,
             return attk;
         }
 
-        if (mon.type == MONS_PLAYER_SHADOW)
+        if (mons_is_player_shadow(mon))
         {
             if (!you.weapon())
                 attk.damage = max(1, you.skill_rdiv(SK_UNARMED_COMBAT, 10, 20));
@@ -5249,9 +5252,16 @@ bool mons_is_avatar(monster_type mc)
     return mons_class_flag(mc, M_AVATAR);
 }
 
+bool mons_is_wrath_avatar(const monster &mon)
+{
+    return mon.type == MONS_PLAYER_SHADOW // ugh
+        && mon.attitude != ATT_FRIENDLY;
+}
+
 bool mons_is_player_shadow(const monster& mon)
 {
-    return mon.type == MONS_PLAYER_SHADOW;
+    return mon.type == MONS_PLAYER_SHADOW
+        && mon.attitude == ATT_FRIENDLY; // hostile shadows are god wrath
 }
 
 bool mons_has_attacks(const monster& mon)

@@ -2771,8 +2771,7 @@ void bolt::internal_ouch(int dam)
         dam *= 4;
 
     // The order of this is important.
-    if (monst && monst->type == MONS_PLAYER_SHADOW
-        && !monst->mname.empty())
+    if (monst && mons_is_wrath_avatar(*monst))
     {
         ouch(dam, KILLED_BY_DIVINE_WRATH, MID_NOBODY,
              aux_source.empty() ? nullptr : aux_source.c_str(), true,
@@ -4780,7 +4779,7 @@ bool bolt::bush_immune(const monster &mons) const
 
 void bolt::affect_monster(monster* mon)
 {
-    // Don't hit dead monsters.
+    // Don't hit dead or fake monsters.
     if (!mon->alive() || mon->type == MONS_PLAYER_SHADOW)
         return;
 
@@ -6258,10 +6257,6 @@ void bolt::determine_affected_cells(explosion_map& m, const coord_def& delta,
         if (new_delta.rdist() > centre.rdist())
             continue;
 
-        // Is that cell already covered?
-        if (m(new_delta + centre) <= count)
-            continue;
-
         // If we were at a wall, only move to visible squares.
         coord_def caster_pos = actor_by_mid(source_id) ?
                                    actor_by_mid(source_id)->pos() :
@@ -6277,6 +6272,10 @@ void bolt::determine_affected_cells(explosion_map& m, const coord_def& delta,
         // Otherwise changing direction (e.g. looking around a wall) costs more.
         else if (delta.x * Compass[i].x < 0 || delta.y * Compass[i].y < 0)
             cadd = 17;
+
+        // Is that cell already covered?
+        if (m(new_delta + centre) <= count + cadd)
+            continue;
 
         determine_affected_cells(m, new_delta, count + cadd, r,
                                  stop_at_statues, stop_at_walls);

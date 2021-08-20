@@ -527,6 +527,10 @@ void moveto_location_effects(dungeon_feature_type old_feat,
 
     if (stepped)
         _moveto_maybe_repel_stairs();
+
+    update_monsters_in_view();
+    if (check_for_interesting_features() && you.running.is_explore())
+        stop_running();
 }
 
 // Use this function whenever the player enters (or lands and thus re-enters)
@@ -550,7 +554,8 @@ void move_player_to_grid(const coord_def& p, bool stepped)
     // Better not be an unsubmerged monster either.
     ASSERT(!monster_at(p) || monster_at(p)->submerged()
            || fedhas_passthrough(monster_at(p))
-           || mons_is_player_shadow(*monster_at(p)));
+           || mons_is_player_shadow(*monster_at(p))
+           || mons_is_wrath_avatar(*monster_at(p)));
 
     // Move the player to new location.
     you.moveto(p, true);
@@ -1374,25 +1379,25 @@ int player_res_cold(bool calc_unid, bool temp, bool items)
     return rc;
 }
 
-bool player::res_corr(bool calc_unid, bool items) const
+bool player::res_corr(bool calc_unid, bool temp) const
 {
-    // dragonskin cloak: 0.5 to draconic resistances
-    if (items && calc_unid
-        && player_equip_unrand(UNRAND_DRAGONSKIN) && coinflip())
+    if (temp)
     {
-        return true;
+        // dragonskin cloak: 0.5 to draconic resistances
+        if (calc_unid && player_equip_unrand(UNRAND_DRAGONSKIN) && coinflip())
+            return true;
+
+        if (get_form()->res_acid())
+            return true;
+
+        if (you.duration[DUR_RESISTANCE])
+            return true;
     }
 
     if (have_passive(passive_t::resist_corrosion))
         return true;
 
     if (get_mutation_level(MUT_ACID_RESISTANCE))
-        return true;
-
-    if (get_form()->res_acid())
-        return true;
-
-    if (you.duration[DUR_RESISTANCE])
         return true;
 
     // TODO: why doesn't this use the usual form suppression mechanism?
@@ -1402,7 +1407,7 @@ bool player::res_corr(bool calc_unid, bool items) const
         return true;
     }
 
-    return actor::res_corr(calc_unid, items);
+    return actor::res_corr(calc_unid, temp);
 }
 
 int player_res_acid(bool calc_unid, bool items)
@@ -1468,7 +1473,7 @@ bool player_kiku_res_torment()
 int player_res_poison(bool calc_unid, bool temp, bool items)
 {
     if (you.is_nonliving(temp)
-        || you.is_lifeless_undead(temp || you.undead_state() == US_SEMI_UNDEAD) // XX: ugly, can this be cleaned up?
+        || you.is_lifeless_undead(temp)
         || temp && get_form()->res_pois() == 3
         || items && player_equip_unrand(UNRAND_OLGREB)
         || temp && you.duration[DUR_DIVINE_STAMINA])
@@ -7006,7 +7011,7 @@ bool player::is_lifeless_undead(bool temp) const
     if (temp && undead_state() == US_SEMI_UNDEAD)
         return !you.vampire_alive;
     else
-        return undead_state(temp) != US_ALIVE;
+        return undead_state(temp) == US_UNDEAD;
 }
 
 bool player::can_polymorph() const

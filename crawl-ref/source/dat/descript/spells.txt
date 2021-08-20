@@ -381,8 +381,9 @@ undead will decompose if affected.
 %%%%
 Creeping Frost spell
 
-Calls forth freezing cold from the walls. Any enemies of the caster standing
-next to those walls will be frozen and will find their movements slowed.
+Calls forth freezing cold from the walls and other similarly solid terrain. Any
+enemies of the caster standing next to that terrain will be frozen and will find
+their movements slowed.
 %%%%
 Crystal Bolt spell
 
@@ -931,9 +932,9 @@ Causes confusion in all who gaze upon the caster.
 %%%%
 Maxwell's Capacitive Coupling spell
 
-Gradually builds up electric charge in the caster. When a critical threshold is
-reached the charge couples with the nearest foe, vapourizing them instantly.
-The resulting charge is so intense it bypasses even electrical immunity.
+Gradually builds up electric charge in the caster, so long as they maintain
+focus (by waiting in place and not taking any other actions). When a threshold
+is reached, the charge couples with the nearest foe, vaporising them instantly.
 Higher spell power will allow the caster to accumulate charge more rapidly.
 %%%%
 Mephitic Cloud spell
@@ -1601,8 +1602,8 @@ Animates the weapon of a targeted foe, ripping it from their hands and causing
 it to attack them relentlessly. Once the target dies, the weapon will fall to
 the ground shortly thereafter.
 
-Ranged weapons and certain powerful named artefacts cannot be affected, and
-any abilities that require evocation skill to trigger will not be active.
+Certain powerful named artefacts cannot be animated, and any properties that
+require skill in evocations will not be active.
 %%%%
 Twisted Resurrection spell
 

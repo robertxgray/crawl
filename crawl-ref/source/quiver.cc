@@ -240,7 +240,7 @@ namespace quiver
         {
             untargeted_fire(*a);
             if (!a->target.isCancel)
-                a->trigger();
+                a->trigger(a->target);
         }
         // TODO: does this cause dbl "ok then"s in some places?
         if (a->target.isCancel && a->target.cmd_result == CMD_NO_CMD)
@@ -556,12 +556,6 @@ namespace quiver
                 return;
             }
 
-            if (feat_is_solid(env.grid(target.target)))
-            {
-                canned_msg(MSG_SOMETHING_IN_WAY);
-                return;
-            }
-
             // Failing to hit someone due to a friend blocking is infuriating,
             // shadow-boxing empty space is not (and would be abusable to wait
             // with no penalty).
@@ -570,6 +564,24 @@ namespace quiver
 
             // Calculate attack delay now in case we have to apply it.
             const int attack_delay = you.attack_delay().roll();
+
+            if (feat_is_solid(env.grid(target.target)))
+            {
+                if (you.confused())
+                {
+                    mprf("You attack %s.",
+                         feature_description_at(target.target,
+                                                false, DESC_THE).c_str());
+                    you.time_taken = attack_delay;
+                    you.turn_is_over = true;
+                    return;
+                }
+                else
+                {
+                    canned_msg(MSG_SOMETHING_IN_WAY);
+                    return;
+                }
+            }
 
             // Check for a monster in the way. If there is one, it blocks the reaching
             // attack 50% of the time, and the attack tries to hit it if it is hostile.
@@ -1163,6 +1175,7 @@ namespace quiver
             if (!target.needs_targeting() && wait_spell_active(spell))
             {
                 crawl_state.prev_cmd = CMD_WAIT; // hackiness, but easy
+                update_acrobat_status();
                 you.turn_is_over = true;
                 return true;
             }
@@ -1362,6 +1375,12 @@ namespace quiver
             // ignores things like butterflies, so that autofight doesn't get
             // tripped up.
             return palentonga_charge_possible(quiet, false);
+        case ABIL_BLINKBOLT:
+            if (!spell_no_hostile_in_range(SPELL_BLINKBOLT))
+                return true;
+            if (!quiet)
+                mpr("You can't see any hostile targets that would be affected.");
+            return false;
         default:
             return true;
         }

@@ -1048,6 +1048,34 @@ aff_type targeter_radius::is_affected(coord_def loc)
     return AFF_YES;
 }
 
+aff_type targeter_shatter::is_affected(coord_def loc)
+{
+    if (loc == origin)
+        return AFF_NO; // Shatter doesn't affect the caster.
+
+    if (!cell_see_cell(loc, origin, LOS_ARENA))
+        return AFF_NO; // No shattering through glass... without work.
+
+    monster* mons = monster_at(loc);
+    if (!mons || !you.can_see(*mons))
+    {
+        const int terrain_chance = terrain_shatter_chance(loc, you);
+        if (terrain_chance == 100)
+            return AFF_YES;
+        else if (terrain_chance > 0)
+            return AFF_MAYBE;
+        return AFF_NO;
+    }
+
+    const dice_def dam = shatter_damage(200, mons);
+    const int dice = dam.num;
+    if (dice == DEFAULT_SHATTER_DICE)
+        return AFF_YES;
+    if (dice > DEFAULT_SHATTER_DICE)
+        return AFF_MULTIPLE;
+    return AFF_MAYBE;
+}
+
 targeter_thunderbolt::targeter_thunderbolt(const actor *act, int r,
                                              coord_def _prev)
 {
@@ -1771,8 +1799,8 @@ aff_type targeter_chain_lightning::is_affected(coord_def loc)
     return AFF_NO;
 }
 
-targeter_maxwells_coupling::targeter_maxwells_coupling(int range)
-    : targeter_multiposition(&you, find_maxwells_possibles(range))
+targeter_maxwells_coupling::targeter_maxwells_coupling()
+    : targeter_multiposition(&you, find_maxwells_possibles())
 {
     if (affected_positions.size() == 1)
         positive = AFF_YES;
