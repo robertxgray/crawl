@@ -15,9 +15,7 @@
 #include "hints.h"
 #include "initfile.h"
 #include "libutil.h"
-#ifdef WIZARD
- #include "luaterp.h"
-#endif
+#include "luaterp.h"
 #include "menu.h"
 #include "monster.h"
 #include "mon-util.h"
@@ -959,7 +957,6 @@ void webtiles_send_more_text(string txt)
 }
 
 #else
-void webtiles_send_messages() { }
 void webtiles_send_more_text(string) { }
 #endif
 
@@ -1508,6 +1505,8 @@ static int _last_msg_turn = -1; // Turn of last message.
 static void _mpr(string text, msg_channel_type channel, int param, bool nojoin,
                  bool cap)
 {
+    static bool _doing_c_message_hook = false;
+
     rng::generator rng(rng::UI);
 
     if (_msg_dump_file != nullptr)
@@ -1559,7 +1558,15 @@ static void _mpr(string text, msg_channel_type channel, int param, bool nojoin,
         return;
     }
 
-    clua.callfn("c_message", "ss", text.c_str(), channel_to_str(channel).c_str());
+    // TODO: running this hook from here is still pretty crazy, maybe it should
+    // be batched and done in the main game loop? But doing it this way at least
+    // does let us directly detect recursion.
+    if (!_doing_c_message_hook)
+    {
+        unwind_bool no_reentry(_doing_c_message_hook, true);
+        clua.callfn("c_message", "ss", text.c_str(),
+                                        channel_to_str(channel).c_str());
+    }
 
     bool domore = _check_more(text, channel);
     bool do_flash_screen = _check_flash_screen(text, channel);
@@ -2178,23 +2185,6 @@ string get_last_messages(int mcount, bool full)
     if (!text.empty())
         text += "\n";
     return text;
-}
-
-void get_recent_messages(vector<string> &mess,
-                         vector<msg_channel_type> &chan)
-{
-    flush_prev_message();
-
-    const store_t& msgs = buffer.get_store();
-    int mcount = NUM_STORED_MESSAGES;
-    for (int i = -1; mcount > 0; --i, --mcount)
-    {
-        const message_line msg = msgs[i];
-        if (!msg)
-            break;
-        mess.push_back(msg.pure_text_with_repeats());
-        chan.push_back(msg.channel);
-    }
 }
 
 bool recent_error_messages()

@@ -30,6 +30,7 @@
 #include "mon-death.h"
 #include "mon-place.h"
 #include "nearby-danger.h" // Compass (for random_walk, CloudGenerator)
+#include "player-stats.h"
 #include "religion.h"
 #include "shout.h"
 #include "spl-util.h"
@@ -296,9 +297,16 @@ static const cloud_data clouds[] = {
         { TILE_CLOUD_BLACK_SMOKE, CTVARY_NONE },
     },
     // CLOUD_FLAME,
-    { "wisps of flame", nullptr,          // terse, verbose name
-      ETC_FIRE,                                // colour
-      { TILE_CLOUD_FLAME, CTVARY_RANDOM },   // tile
+    { "wisps of flame", nullptr,                  // terse, verbose name
+      ETC_FIRE,                                   // colour
+      { TILE_CLOUD_FLAME, CTVARY_RANDOM },        // tile
+    },
+    // CLOUD_DEGENERATION,
+    { "degeneration",  nullptr,                   // terse, verbose name
+      ETC_DARK,                                   // colour
+      { TILE_CLOUD_DEGENERATION, CTVARY_NONE },   // tile
+      BEAM_NONE, {},                              // beam & damage
+      false,                                      // opacity
     },
 };
 COMPILE_CHECK(ARRAYSZ(clouds) == NUM_CLOUD_TYPES);
@@ -510,18 +518,19 @@ static bool _handle_conjure_flame(const cloud_struct &cloud)
         mpr("You smother the flame.");
         return false;
     }
-    else if (monster_at(cloud.pos))
+    const monster *mons = monster_at(cloud.pos);
+    if (mons && !mons_is_conjured(mons->type))
     {
         mprf("%s smothers the flame.",
              monster_at(cloud.pos)->name(DESC_THE).c_str());
         return false;
     }
-    else
-    {
-        mpr("The fire ignites!");
-        place_cloud(CLOUD_FIRE, cloud.pos, you.props[CFLAME_DUR_KEY], &you);
-        return true;
-    }
+
+    mpr("The fire ignites!");
+    const int dur = you.props[CFLAME_DUR_KEY].get_int();
+    place_cloud(CLOUD_FIRE, cloud.pos, dur, &you);
+    you.props.erase(CFLAME_DUR_KEY);
+    return true;
 }
 
 /**
@@ -856,13 +865,6 @@ cloud_type random_smoke_type()
     return random_choose(CLOUD_GREY_SMOKE, CLOUD_BLUE_SMOKE,
                          CLOUD_BLACK_SMOKE, CLOUD_PURPLE_SMOKE);
 }
-int max_cloud_damage(cloud_type cl_type, int power)
-{
-    cloud_struct cloud;
-    cloud.type = cl_type;
-    cloud.decay = power * 10;
-    return _actor_cloud_damage(&you, cloud, true);
-}
 
 // Returns true if the cloud type has negative side effects beyond
 // plain damage and inventory destruction effects.
@@ -873,6 +875,7 @@ static bool _cloud_has_negative_side_effects(cloud_type cloud)
     case CLOUD_MEPHITIC:
     case CLOUD_MIASMA:
     case CLOUD_MUTAGENIC:
+    case CLOUD_DEGENERATION:
     case CLOUD_CHAOS:
     case CLOUD_PETRIFY:
     case CLOUD_ACID:
@@ -967,7 +970,9 @@ bool actor_cloud_immune(const actor &act, cloud_type type)
         case CLOUD_PETRIFY:
             return act.res_petrify();
         case CLOUD_SPECTRAL:
-            return bool(act.holiness() & MH_UNDEAD);
+            return bool(act.holiness() & MH_UNDEAD)
+                   || act.is_player()
+                      && have_passive(passive_t::r_spectral_mist);
         case CLOUD_ACID:
             return act.res_acid() > 0;
         case CLOUD_STORM:
@@ -1173,6 +1178,15 @@ static bool _actor_apply_cloud_side_effects(actor *act,
         {
             if (you_worship(GOD_ZIN) && cloud.whose == KC_YOU)
                 did_god_conduct(DID_DELIBERATE_MUTATING, 5 + random2(3));
+            return true;
+        }
+        return false;
+
+    case CLOUD_DEGENERATION:
+        if (player && one_chance_in(4))
+        {
+            mpr("You feel yourself deteriorate.");
+            lose_stat(STAT_RANDOM, 1 + random2avg(4,2));
             return true;
         }
         return false;

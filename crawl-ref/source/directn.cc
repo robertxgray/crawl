@@ -1573,7 +1573,8 @@ string direction_chooser::target_description() const
 void direction_chooser::print_target_monster_description(bool &did_cloud) const
 {
     string text = target_description();
-    if ( text > "" ) {
+    if (text > "")
+    {
         mprf(MSGCH_PROMPT, "%s: <lightgrey>%s</lightgrey>",
             target_prefix ? target_prefix : !behaviour->targeted() ? "Look" : "Aim",
             text.c_str());
@@ -2223,7 +2224,7 @@ public:
         if (ev.type() == ui::Event::Type::KeyDown)
         {
             auto key = static_cast<const ui::KeyEvent&>(ev).key();
-            key = unmangle_direction_keys(key, KMC_TARGETING, false);
+            key = unmangle_direction_keys(key, KMC_TARGETING);
 
             const auto command = m_dc.behaviour->get_command(key);
             // XX a bit ugly to do this here..
@@ -2419,6 +2420,7 @@ bool direction_chooser::choose_direction()
     return moves.isValid;
 }
 
+#ifdef USE_TILE
 string get_terse_square_desc(const coord_def &gc)
 {
     string desc = "";
@@ -2450,6 +2452,7 @@ string get_terse_square_desc(const coord_def &gc)
 
     return desc;
 }
+#endif
 
 void terse_describe_square(const coord_def &c, bool in_range)
 {
@@ -2459,6 +2462,7 @@ void terse_describe_square(const coord_def &c, bool in_range)
         _describe_cell(c, in_range);
 }
 
+#ifdef USE_TILE_LOCAL
 // Get description of the "top" thing in a square; for mouseover text.
 void get_square_desc(const coord_def &c, describe_info &inf)
 {
@@ -2497,6 +2501,7 @@ void get_square_desc(const coord_def &c, describe_info &inf)
     else // Fourth priority: clouds.
         inf.body << get_cloud_desc(cloud);
 }
+#endif
 
 // Show a description of the only thing on a square, or a selection menu with
 // visible things on the square if there are many. For x-v and similar contexts.
@@ -3215,7 +3220,11 @@ string feature_description_at(const coord_def& where, bool covering,
     if (covering && you.see_cell(where))
     {
         if (feat_is_tree(grid) && env.forest_awoken_until)
+        {
             covering_description += ", awoken";
+            covering_description += env.forest_is_hostile ? " (hostile)" :
+                                                            " (friendly)";
+        }
 
         if (is_icecovered(where))
             covering_description = ", covered with ice";
@@ -3281,6 +3290,10 @@ string feature_description_at(const coord_def& where, bool covering,
                 desc += "sealed ";
             else if (grid == DNGN_SEALED_CLEAR_DOOR)
                 desc += "sealed translucent ";
+            else if (grid == DNGN_BROKEN_DOOR)
+                desc += "broken ";
+            else if (grid == DNGN_BROKEN_CLEAR_DOOR)
+                desc += "broken translucent ";
             else
                 desc += "closed ";
         }
@@ -3567,11 +3580,6 @@ static string _get_monster_desc(const monster_info& mi)
     {
         text += string(mi.pronoun(PRONOUN_POSSESSIVE))
                 + " soul is ripe for the taking.\n";
-    }
-    else if (mi.is(MB_ENSLAVED))
-    {
-        text += pronoun + " " + conjugate_verb("are", mi.pronoun_plurality())
-                + " a disembodied soul.\n";
     }
 
     if (mi.is(MB_MIRROR_DAMAGE))

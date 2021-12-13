@@ -631,6 +631,7 @@ static void debug_load_map_by_name(string name, bool primary)
     {
         if (toplace->orient == MAP_ENCOMPASS
             && !toplace->is_usable_in(level_id::current())
+            && !toplace->place.is_usable_in(level_id::current())
             && !yesno("Warning: this is an encompass vault not designed "
                        "for this location; placing it with &P may result in "
                        "crashes and save corruption. Continue?", true, 'y'))
@@ -852,7 +853,9 @@ void wizard_recreate_level()
     leaving_level_now(stair_taken);
     delete_level(lev);
     const bool newlevel = load_level(stair_taken, LOAD_START_GAME, lev);
-    you.get_place_info().levels_seen--;
+    if (you.get_place_info().levels_seen > 1)
+        you.get_place_info().levels_seen--; // this getting to 0 -> crashes
+
     tile_new_level(newlevel);
     if (!crawl_state.test)
         save_game_state();

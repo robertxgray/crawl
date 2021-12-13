@@ -490,23 +490,6 @@ static void _xom_checks_damage(kill_method_type death_type,
     }
 }
 
-static void _yred_mirrors_injury(int dam, mid_t death_source)
-{
-    if (yred_injury_mirror())
-    {
-        // Cap damage to what was enough to kill you. Can matter if
-        // Yred saves your life or you have an extra kitty.
-        if (you.hp < 0)
-            dam += you.hp;
-
-        monster* mons = monster_by_mid(death_source);
-        if (dam <= 0 || !mons)
-            return;
-
-        mirror_damage_fineff::schedule(mons, &you, dam);
-    }
-}
-
 static void _maybe_ru_retribution(int dam, mid_t death_source)
 {
     if (will_ru_retaliate())
@@ -538,7 +521,17 @@ static void _maybe_spawn_rats(int dam, kill_method_type death_type)
     if (!x_chance_in_y(capped_dam, you.hp_max))
         return;
 
-    monster_type mon = coinflip() ? MONS_HELL_RAT : MONS_RIVER_RAT;
+    auto rats = { MONS_HELL_RAT, MONS_RIVER_RAT };
+    // Choose random in rats where the rat isn't hated by the player's god.
+    int seen = 0;
+    monster_type mon = MONS_NO_MONSTER;
+    for (auto rat : rats)
+        if (!god_hates_monster(rat) && one_chance_in(++seen))
+            mon = rat;
+
+    // If there's no valid creatures to pull from (e.g., follower of Oka), bail out.
+    if (!seen)
+        return;
 
     mgen_data mg(mon, BEH_FRIENDLY, you.pos(), MHITYOU);
     mg.flags |= MG_FORCE_BEH; // don't mention how much it hates you before it appears
@@ -546,6 +539,8 @@ static void _maybe_spawn_rats(int dam, kill_method_type death_type)
     {
         m->add_ench(mon_enchant(ENCH_FAKE_ABJURATION, 3));
         mprf("%s scurries out from under your cloak.", m->name(DESC_A).c_str());
+        // We should return early in the case of no_love or no_allies,
+        // so this is more a sanity check.
         check_lovelessness(*m);
     }
 }
@@ -1012,7 +1007,6 @@ void ouch(int dam, kill_method_type death_type, mid_t source, const char *aux,
                            damage_desc.c_str()));
 
             _deteriorate(dam);
-            _yred_mirrors_injury(dam, source);
             _maybe_ru_retribution(dam, source);
             _maybe_spawn_monsters(dam, death_type, source);
             _maybe_spawn_rats(dam, death_type);
