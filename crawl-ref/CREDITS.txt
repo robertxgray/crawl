@@ -130,6 +130,7 @@
     Cedor
     Cerol
     Marcelo Cerri
+    Zachary Chandler
     Rahul Chandra
     Joe Childers
     Thom Chiovoloni
@@ -184,6 +185,7 @@
     Ben Goetter
     Aaron Golden
     Ed Gonzalez
+    Gopall
     Goratrix
     Rob Grant
     John Greenberg
@@ -239,6 +241,7 @@
     Sami Liedes
     Dom 'Bodrick' Light
     Lightli
+    Kiëd Llaentenn
     Mark Lodato
     Matthew Ludivico
     Rob Lund
@@ -287,6 +290,8 @@
     John Olender
     Aaron Olowin
     Andrew O'Neill
+    Oneirical
+    Justin Clark Ong
     Yuuma Oohara
     Julian Ospald
     Malwyn P
@@ -368,6 +373,7 @@
     Chris Terenzi
     Jared 'Twinge' Tinney
     Matt Titus
+    Jonathan Klabunde Tomer
     Tommy
     Sean VanMeter
     Mikko Vepsäläinen
