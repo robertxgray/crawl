@@ -997,8 +997,19 @@ targeter_cleave::targeter_cleave(const actor* act, coord_def target, int rng)
 
 bool targeter_cleave::valid_aim(coord_def a)
 {
-    if ((origin - a).rdist() > range)
+    const coord_def delta = a - origin;
+    if (delta.rdist() > range)
         return notify_fail("Your weapon can't reach that far!");
+    if (range == 2)
+    {
+        const coord_def first_middle(origin + delta / 2);
+        const coord_def second_middle(a - delta / 2);
+        if (!feat_is_reachable_past(env.grid(first_middle))
+             && !feat_is_reachable_past(env.grid(second_middle)))
+        {
+            return notify_fail("There's something in the way.");
+        }
+    }
     return true;
 }
 
@@ -1616,6 +1627,8 @@ aff_type targeter_refrig::is_affected(coord_def loc)
         return AFF_NO;
     const actor* act = actor_at(loc);
     if (!act || act == agent || !agent->can_see(*act))
+        return AFF_NO;
+    if (god_protects(agent, act->as_monster(), true))
         return AFF_NO;
 
     int adj = 0;
