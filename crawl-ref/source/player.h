@@ -78,6 +78,7 @@ static const int FASTEST_PLAYER_THROWING_SPEED = 7;
 
 class targeter;
 class Delay;
+struct player_save_info;
 
 int player_stealth();
 
@@ -196,7 +197,6 @@ public:
     int berserk_penalty;                // The penalty for moving while berserk
 
     FixedVector<int, NUM_ATTRIBUTES> attribute;
-    FixedVector<uint8_t, quiver::NUM_LAUNCHERS> quiver; // default items for quiver
     FixedVector<int, NUM_TIMERS> last_timer_effect;
     FixedVector<int, NUM_TIMERS> next_timer_effect;
 
@@ -213,11 +213,7 @@ public:
     FixedVector<unsigned int, NUM_SKILLS> skill_points;
     FixedVector<unsigned int, NUM_SKILLS> training_targets; ///< Training targets, scaled by 10 (so [0,270]).  0 means no target.
     int experience_pool; ///< XP waiting to be applied.
-
-    /// track skill points gained by crosstraining
-    FixedVector<unsigned int, NUM_SKILLS> ct_skill_points;
     FixedVector<uint8_t, NUM_SKILLS>  skill_order;
-
     /// manuals
     FixedVector<unsigned int, NUM_SKILLS>  skill_manual_points;
 
@@ -320,7 +316,6 @@ public:
     quiver::ammo_history m_quiver_history;
 
     quiver::action_cycler quiver_action;
-    quiver::launcher_action_cycler launcher_action;
 
     // monsters mesmerising player; should be protected, but needs to be saved
     // and restored.
@@ -478,6 +473,8 @@ public:
     player();
     virtual ~player();
 
+    void init_from_save_info(const player_save_info &s);
+
     void init_skills();
 
     // Set player position without updating view geometry.
@@ -508,7 +505,7 @@ public:
     bool can_water_walk() const;
     int visible_igrd(const coord_def&) const;
     bool is_banished() const override;
-    bool is_sufficiently_rested() const; // Up to rest_wait_percent HP and MP.
+    bool is_sufficiently_rested(bool starting=false) const; // Up to rest_wait_percent HP and MP.
     bool is_web_immune() const override;
     bool cannot_speak() const;
     bool invisible() const override;
@@ -518,6 +515,7 @@ public:
     bool can_see(const actor& a) const override;
     undead_state_type undead_state(bool temp = true) const;
     bool nightvision() const override;
+    bool may_pruneify() const;
     reach_type reach_range() const override;
     bool see_cell(const coord_def& p) const override;
 
@@ -613,8 +611,10 @@ public:
     int         damage_type(int which_attack = -1) override;
     random_var  attack_delay(const item_def *projectile = nullptr,
                              bool rescale = true) const override;
-    int         constriction_damage(bool direct) const override;
-    bool        constriction_does_damage(bool /* direct */) const override
+    random_var  attack_delay_with(const item_def *projectile, bool rescale,
+                                  const item_def *weapon) const;
+    int         constriction_damage(constrict_type typ) const override;
+    bool        constriction_does_damage(constrict_type /* typ */) const override
                     { return true; };
 
     int       has_claws(bool allow_tran = true) const override;
@@ -658,6 +658,7 @@ public:
                        vector<const item_def *> *matches = nullptr) const override;
 
     int infusion_amount() const;
+    int infusion_multiplier() const;
 
     item_def *weapon(int which_attack = -1) const override;
     item_def *shield() const override;
@@ -688,10 +689,9 @@ public:
     string foot_name(bool plural, bool *can_plural = nullptr) const override;
     string arm_name(bool plural, bool *can_plural = nullptr) const override;
     int arm_count() const;
-    string unarmed_attack_name() const;
+    string unarmed_attack_name(string default_name="Nothing wielded") const;
 
     bool fumbles_attack() override;
-    bool fights_well_unarmed(int heavy_armour_penalty) override;
 
     void attacking(actor *other) override;
     bool can_go_berserk() const override;
@@ -766,7 +766,7 @@ public:
     int res_elec() const override;
     int res_poison(bool temp = true) const override;
     bool res_miasma(bool temp = true) const override;
-    int res_water_drowning() const override;
+    bool res_water_drowning() const override;
     bool res_sticky_flame() const override;
     int res_holy_energy() const override;
     int res_negative_energy(bool intrinsic_only = false) const override;
@@ -794,7 +794,7 @@ public:
     bool cannot_act() const override;
     bool confused() const override;
     bool caught() const override;
-    bool backlit(bool self_halo = true) const override;
+    bool backlit(bool self_halo = true, bool temp = true) const override;
     bool umbra() const override;
     int halo_radius() const override;
     int silence_radius() const override;
@@ -817,6 +817,7 @@ public:
     int beam_resists(bolt &beam, int hurted, bool doEffects, string source)
         override;
     bool can_feel_fear(bool include_unknown) const override;
+    bool resists_dislodge(string event = "") const override;
 
     bool can_throw_large_rocks() const override;
     bool can_smell() const;
@@ -844,9 +845,6 @@ public:
     int unadjusted_body_armour_penalty() const override;
     int adjusted_body_armour_penalty(int scale = 1) const override;
     int adjusted_shield_penalty(int scale = 1) const override;
-    float get_shield_skill_to_offset_penalty(const item_def &item);
-    int armour_tohit_penalty(bool random_factor, int scale = 1) const override;
-    int shield_tohit_penalty(bool random_factor, int scale = 1) const override;
 
     bool wearing_light_armour(bool with_skill = false) const;
     int  skill(skill_type skill, int scale = 1, bool real = false,
@@ -930,8 +928,6 @@ protected:
     bool _possible_fearmonger(const monster* mon) const;
 
 };
-COMPILE_CHECK((int) SP_UNKNOWN_BRAND < 8*sizeof(you.seen_weapon[0]));
-COMPILE_CHECK((int) SP_UNKNOWN_BRAND < 8*sizeof(you.seen_armour[0]));
 
 class monster;
 struct item_def;
@@ -994,7 +990,7 @@ int player_wizardry(spell_type spell);
 int player_prot_life(bool allow_random = true, bool temp = true,
                      bool items = true);
 
-bool regeneration_is_inhibited();
+bool regeneration_is_inhibited(const monster *m=nullptr);
 int player_regen();
 int player_mp_regen();
 
@@ -1030,14 +1026,12 @@ int player_spec_hex();
 int player_spec_poison();
 int player_spec_summ();
 
-int player_adjust_evoc_power(const int power, int enhancers = 0);
-
 int player_speed();
 
 int player_spell_levels(bool floored = true);
 int player_total_spell_levels();
 
-int player_teleport();
+int get_teleportitis_level();
 
 int player_monster_detect_radius();
 
@@ -1107,6 +1101,7 @@ bool sanguine_armour_valid();
 void activate_sanguine_armour();
 
 void refresh_weapon_protection();
+void refresh_meek_bonus();
 
 void set_mp(int new_amount);
 
@@ -1121,7 +1116,7 @@ bool confuse_player(int amount, bool quiet = false, bool force = false);
 
 bool poison_player(int amount, string source, string source_aux = "",
                    bool force = false);
-void paralyse_player(string source, int amount = 0);
+void paralyse_player(string source);
 void handle_player_poison(int delay);
 void reduce_player_poison(int amount);
 int get_player_poisoning();

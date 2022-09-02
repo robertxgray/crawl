@@ -338,9 +338,11 @@ class MultipleChoiceGameOption : public GameOption
 {
 public:
     MultipleChoiceGameOption(T &_val, std::set<std::string> _names, T _default,
-                             map<string, T> _choices)
+                             map<string, T> _choices,
+                             bool _normalize_bools=false)
         : GameOption(_names), value(_val), default_value(_default),
-          choices(_choices) { }
+          choices(_choices), normalize_bools(_normalize_bools)
+    { }
 
     void reset() override
     {
@@ -358,9 +360,24 @@ public:
 
     string loadFromString(const std::string &field, rc_line_type ltyp) override
     {
-        const T *choice = map_find(choices, field);
+        string normalized = field;
+        if (!choices.size())
+        {
+            return make_stringf("Option %s is disabled in this build.",
+                name().c_str());
+        }
+        if (normalize_bools)
+        {
+            if (field == "1" || field == "yes")
+                normalized = "true";
+            else if (field == "0" || field == "no")
+                normalized = "false";
+        }
+
+        const T *choice = map_find(choices, normalized);
         if (choice == 0)
         {
+
             string all_choices = comma_separated_fn(choices.begin(),
                 choices.end(), [] (const pair<string, T> &p) {return p.first;},
                 " or ");
@@ -371,13 +388,14 @@ public:
         else
         {
             value = *choice;
-            return GameOption::loadFromString(field, ltyp);
+            return GameOption::loadFromString(normalized, ltyp);
         }
     }
 
 private:
     T &value, default_value;
     map<string, T> choices;
+    bool normalize_bools;
 };
 
 bool read_bool(const std::string &field, bool def_value);

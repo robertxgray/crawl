@@ -56,8 +56,6 @@ static bool _is_book_type(const item_def& item,
 
 bool is_holy_item(const item_def& item, bool calc_unid)
 {
-    bool retval = false;
-
     if (is_unrandom_artefact(item))
     {
         const unrandart_entry* entry = get_unrand_entry(item.unrand_idx);
@@ -74,19 +72,7 @@ bool is_holy_item(const item_def& item, bool calc_unid)
             return get_weapon_brand(item) == SPWPN_HOLY_WRATH;
     }
 
-    if (!calc_unid && !item_type_known(item))
-        return false;
-
-    switch (item.base_type)
-    {
-    case OBJ_SCROLLS:
-        retval = (item.sub_type == SCR_HOLY_WORD);
-        break;
-    default:
-        break;
-    }
-
-    return retval;
+    return false;
 }
 
 bool is_potentially_evil_item(const item_def& item, bool calc_unid)
@@ -161,6 +147,8 @@ bool is_evil_item(const item_def& item, bool calc_unid)
         return item.sub_type == STAFF_DEATH;
     case OBJ_MISCELLANY:
         return item.sub_type == MISC_HORN_OF_GERYON;
+    case OBJ_BOOKS:
+        return _is_book_type(item, is_evil_spell);
     default:
         return false;
     }
@@ -291,6 +279,7 @@ bool is_hasty_item(const item_def& item, bool calc_unid)
     {
     case OBJ_ARMOUR:
         return get_armour_rampaging(item, true)
+               || get_armour_ego_type(item) == SPARM_MAYHEM
                || is_unrandom_artefact(item, UNRAND_LIGHTNING_SCALES);
     case OBJ_POTIONS:
         return item.sub_type == POT_HASTE;
@@ -306,7 +295,8 @@ bool is_hasty_item(const item_def& item, bool calc_unid)
 bool is_wizardly_item(const item_def& item, bool calc_unid)
 {
     if ((calc_unid || item_brand_known(item))
-        && get_weapon_brand(item) == SPWPN_PAIN)
+        && (get_weapon_brand(item) == SPWPN_PAIN
+           || get_armour_ego_type(item) == SPARM_ENERGY))
     {
         return true;
     }

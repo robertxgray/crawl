@@ -770,6 +770,7 @@ static void _print_stats_mp(int x, int y)
     int col = _count_digits(you.magic_points)
               + _count_digits(you.max_magic_points) + 1;
 
+#if TAG_MAJOR_VERSION == 34
     int real_mp = get_real_mp(false);
     if (you.species == SP_DEEP_DWARF
         && real_mp != you.max_magic_points)
@@ -777,6 +778,7 @@ static void _print_stats_mp(int x, int y)
         CPRINTF(" (%d)", real_mp);
         col += _count_digits(real_mp) + 3;
     }
+#endif
 
     if (boosted)
         textcolour(HUD_VALUE_COLOUR);
@@ -983,33 +985,7 @@ static void _print_stats_wp(int y)
     CPRINTF("%s", slot_name.c_str());
     textcolour(_wpn_name_colour());
     const int max_name_width = crawl_view.hudsz.x - slot_name.size();
-
-    // If there is a launcher, but something unrelated is quivered, show the
-    // launcher's ammo in the line with the weapon
-    if (you.weapon() && is_range_weapon(*you.weapon())
-        && *you.launcher_action.get() != *you.quiver_action.get())
-    {
-        formatted_string lammo;
-        if (you.launcher_action.is_empty()
-            || !you.launcher_action.get()->is_valid())
-        {
-            // the player has no ammo for the wielded launcher, or has
-            // explicitly unquivered it
-            lammo = quiver::action().quiver_description(true);
-        }
-        else
-            lammo = you.launcher_action.get()->quiver_description(true);
-
-        const int trimmed_size = max_name_width - lammo.tostring().size() - 3;
-        CPRINTF("%s ", chop_string(text, trimmed_size).c_str());
-        textcolour(LIGHTGREY);
-        CPRINTF("(");
-        lammo.display();
-        textcolour(LIGHTGREY);
-        CPRINTF(")");
-    }
-    else
-        CPRINTF("%s", chop_string(text, max_name_width).c_str());
+    CPRINTF("%s", chop_string(text, max_name_width).c_str());
     textcolour(LIGHTGREY);
 
     you.wield_change  = false;
@@ -1829,7 +1805,7 @@ static string _itosym(int level, int max = 1, bool immune = false)
         return "";
 
     if (immune)
-        return "∞";
+        return Options.char_set == CSET_ASCII ? "inf" : "\u221e"; //"∞"
 
     string sym;
     bool spacing = (max >= 5) ? false : true;
@@ -1857,7 +1833,7 @@ static string _itosym(int level, int max = 1, bool immune = false)
 static const char *s_equip_slot_names[] =
 {
     "Weapon", "Cloak",  "Helmet", "Gloves", "Boots",
-    "Shield", "Armour", "Left Ring", "Right Ring", "Amulet",
+    "Shield", "Body Armour", "Left Ring", "Right Ring", "Amulet",
     "First Ring", "Second Ring", "Third Ring", "Fourth Ring",
     "Fifth Ring", "Sixth Ring", "Seventh Ring", "Eighth Ring",
     "Amulet Ring"
@@ -2114,9 +2090,6 @@ static string _god_asterisks()
     if (you_worship(GOD_NO_GOD))
         return "";
 
-    if (player_under_penance())
-        return "*";
-
     if (you_worship(GOD_GOZAG))
         return "";
 
@@ -2211,11 +2184,13 @@ static vector<formatted_string> _get_overview_stats()
             entry.textcolour(HUD_VALUE_COLOUR);
 
         entry.cprintf("%d/%d", you.magic_points, you.max_magic_points);
+#if TAG_MAJOR_VERSION == 34
         if (you.species == SP_DEEP_DWARF
             && get_real_mp(false) != you.max_magic_points)
         {
             entry.cprintf(" (%d)", get_real_mp(false));
         }
+#endif
 
         cols.add_formatted(0, entry.to_colour_string(), false);
         entry.clear();
@@ -2466,9 +2441,7 @@ static vector<formatted_string> _get_overview_resistances(
     const int rspir = you.spirit_shield();
     out += _resist_composer("Spirit", cwidth, rspir) + "\n";
 
-    const item_def *sh = you.shield();
-    const int reflect = you.reflection()
-                        || sh && shield_reflects(*sh);
+    const int reflect = you.reflection();
     out += _resist_composer("Reflect", cwidth, reflect) + "\n";
 
     const int harm = you.extra_harm();
@@ -2481,7 +2454,7 @@ static vector<formatted_string> _get_overview_resistances(
 
     const int archmagi = you.archmagi();
     if (archmagi)
-        out += _resist_composer("Archmagi", cwidth, archmagi) + "\n";
+        out += _resist_composer("Archmagi", cwidth, archmagi, archmagi) + "\n";
 
     const int rclarity = you.clarity();
     if (rclarity)
@@ -2496,7 +2469,7 @@ static vector<formatted_string> _get_overview_resistances(
     {
         if (you.no_tele())
             out += _resist_composer("NoTele", cwidth, 1, 1, false) + "\n";
-        else if (player_teleport())
+        else if (get_teleportitis_level())
             out += _resist_composer("Rnd*Tele", cwidth, 1, 1, false) + "\n";
     }
 

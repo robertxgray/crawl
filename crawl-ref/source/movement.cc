@@ -51,9 +51,10 @@
 #include "travel.h"
 #include "travel-open-doors-type.h"
 #include "transform.h"
+#include "unwind.h"
 #include "xom.h" // XOM_CLOUD_TRAIL_TYPE_KEY
 
-static void _apply_move_time_taken(int additional_time_taken = 0);
+static void _apply_move_time_taken();
 
 // Swap monster to this location. Player is swapped elsewhere.
 // Moves the monster into position, but does not move the player
@@ -116,20 +117,6 @@ static int _check_adjacent(dungeon_feature_type feat, coord_def& delta)
     }
 
     return num;
-}
-
-static void _entered_malign_portal(actor* act)
-{
-    ASSERT(act); // XXX: change to actor &act
-    if (you.can_see(*act))
-    {
-        mprf("%s %s twisted violently and ejected from the portal!",
-             act->name(DESC_THE).c_str(), act->conj_verb("be").c_str());
-    }
-
-    act->blink();
-    act->hurt(nullptr, roll_dice(2, 4), BEAM_MISSILE, KILLED_BY_WILD_MAGIC,
-              "", "entering a malign gateway");
 }
 
 static bool _cancel_barbed_move(bool rampaging)
@@ -239,8 +226,64 @@ void remove_water_hold()
 static void _clear_constriction_data()
 {
     you.stop_directly_constricting_all(true);
-    if (you.is_directly_constricted())
+    if (you.get_constrict_type() == CONSTRICT_MELEE)
         you.stop_being_constricted();
+}
+
+static void _trigger_opportunity_attacks(coord_def new_pos)
+{
+    if (you.attribute[ATTR_SERPENTS_LASH]          // too fast!
+        || wu_jian_move_triggers_attacks(new_pos)  // too cool!
+        || is_sanctuary(you.pos())                 // Zin protects!
+        || is_sanctuary(new_pos))                  // .. very generously.
+    {
+        return;
+    }
+
+    unwind_bool moving(crawl_state.player_moving, true);
+
+    const coord_def orig_pos = you.pos();
+    for (adjacent_iterator ai(orig_pos); ai; ++ai)
+    {
+        if (adjacent(*ai, new_pos))
+            continue;
+        monster* mon = monster_at(*ai);
+        // No, there is no logic to this ordering (pf):
+        if (!mon
+            || mon->wont_attack()
+            || !mons_has_attacks(*mon)
+            || mon->confused()
+            || mon->incapacitated()
+            || mons_is_fleeing(*mon)
+            || mon->is_constricted() && (mon->constricted_by != MID_PLAYER
+                                         || mon->get_constrict_type() != CONSTRICT_MELEE)
+            || !mon->can_see(you)
+            // only let monsters attack if they might follow you
+            || !mon->may_have_action_energy() || mon->is_stationary()
+            // Zin protects!
+            || is_sanctuary(mon->pos())
+            // creates some weird bugs
+            || mons_self_destructs(*mon)
+            // monsters that are slower than you mayn't attack
+            || mon->outpaced_by_player()
+            || !one_chance_in(3))
+        {
+            continue;
+        }
+        actor* foe = mon->get_foe();
+        if (!foe || !foe->is_player())
+            continue;
+
+        simple_monster_message(*mon, " attacks as you move away!");
+        const int old_energy = mon->speed_increment;
+        launch_opportunity_attack(*mon);
+        // Refund up to 10 energy (1 turn) from the attack.
+        // Thus, only slow attacking monsters use energy for these.
+        mon->speed_increment = min(mon->speed_increment + 10, old_energy);
+
+        if (you.pending_revival || you.pos() != orig_pos)
+            return;
+    }
 }
 
 bool apply_cloud_trail(const coord_def old_pos)
@@ -528,12 +571,6 @@ bool prompt_dangerous_portal(dungeon_feature_type ftype)
     case DNGN_ENTER_ABYSS:
         return yesno("If you enter this portal you might not be able to return "
                      "immediately. Continue?", false, 'n');
-
-    case DNGN_MALIGN_GATEWAY:
-        return yesno("Are you sure you wish to approach this portal? There's no "
-                     "telling what its forces would wreak upon your fragile "
-                     "self.", false, 'n');
-
     default:
         return true;
     }
@@ -698,7 +735,7 @@ static spret _rampage_forward(coord_def move)
     // * weapon check prompts;
     // messaging for this is handled by check_moveto().
     if (!check_moveto(beam.target, "rampage")
-        || attacking && !wielded_weapon_check(you.weapon(), "rampage")
+        || attacking && !wielded_weapon_check(you.weapon(), "rampage and attack")
         || !attacking && !check_moveto(rampage_target, "rampage"))
     {
         stop_running();
@@ -707,10 +744,6 @@ static spret _rampage_forward(coord_def move)
     }
 
     // We've passed the validity checks, go ahead and rampage.
-
-    // First, apply any necessary pre-move effects:
-    remove_water_hold();
-    _clear_constriction_data();
     const coord_def old_pos = you.pos();
 
     clear_messages();
@@ -728,6 +761,11 @@ static spret _rampage_forward(coord_def move)
              enhanced ? "stride" : "rampage",
              valid_target->name(DESC_THE, true).c_str());
     }
+
+    // First, apply any necessary pre-move effects:
+    remove_water_hold();
+    _clear_constriction_data();
+    // (But not opportunity attacks - messy codewise, and no design benefit.)
 
     // stepped = true, we're flavouring this as movement, not a blink.
     move_player_to_grid(beam.target, true);
@@ -748,11 +786,10 @@ static spret _rampage_forward(coord_def move)
     return spret::success;
 }
 
-static void _apply_move_time_taken(int additional_time_taken)
+static void _apply_move_time_taken()
 {
     you.time_taken *= player_movement_speed();
     you.time_taken = div_rand_round(you.time_taken, 10);
-    you.time_taken += additional_time_taken;
 
     if (you.running && you.running.travel_speed)
     {
@@ -794,8 +831,6 @@ void move_player_action(coord_def move)
     bool moving = true;         // used to prevent eventual movement (swap)
     bool swap = false;
 
-    int additional_time_taken = 0; // Extra time independent of movement speed
-
     ASSERT(!in_bounds(you.pos()) || !cell_is_solid(you.pos())
            || you.wizmode_teleported_into_rock);
 
@@ -817,7 +852,7 @@ void move_player_action(coord_def move)
             // abuse, since trying to move (not attack) takes no time, and
             // shouldn't. Just force confused trees to use ctrl.
             mpr("You cannot move. (Use ctrl+direction or * direction to "
-                "attack without moving.)");
+                "attack while stationary and confused.)");
             return;
         }
 
@@ -991,7 +1026,9 @@ void move_player_action(coord_def move)
                 moving = false;
             }
         }
-        else if (targ_monst->temp_attitude() == ATT_NEUTRAL && !you.confused()
+        else if (targ_monst->temp_attitude() == ATT_NEUTRAL
+                 && !targ_monst->has_ench(ENCH_INSANE)
+                 && !you.confused()
                  && targ_monst->visible_to(&you))
         {
             simple_monster_message(*targ_monst, " refuses to make way for you. "
@@ -1078,7 +1115,7 @@ void move_player_action(coord_def move)
                  DESC_THE).c_str());
             destroy_wall(targ);
             noisy(6, you.pos());
-            additional_time_taken += BASELINE_DELAY / 5;
+            drain_player(15, false, true);
             dug = true;
         }
 
@@ -1090,6 +1127,11 @@ void move_player_action(coord_def move)
         else if (!running)
             clear_travel_trail();
 
+        // Calculate time_taken before checking opportunity attacks so that
+        // we can guess whether monsters will be able to follow you (& hence
+        // trigger opp attacks).
+        _apply_move_time_taken();
+
         coord_def old_pos = you.pos();
         // Don't trigger things that require movement
         // when confusion causes no move.
@@ -1097,10 +1139,16 @@ void move_player_action(coord_def move)
         {
             remove_water_hold();
             _clear_constriction_data();
-            move_player_to_grid(targ, true);
-            apply_barbs_damage();
-            remove_ice_movement();
-            apply_cloud_trail(old_pos);
+            if (!swap)
+                _trigger_opportunity_attacks(targ);
+            // Check nothing weird happened during opportunity attacks.
+            if (!you.pending_revival)
+            {
+                move_player_to_grid(targ, true);
+                apply_barbs_damage();
+                remove_ice_movement();
+                apply_cloud_trail(old_pos);
+            }
         }
 
         // Now it is safe to apply the swappee's location effects and add
@@ -1111,8 +1159,6 @@ void move_player_action(coord_def move)
 
         if (you_are_delayed() && current_delay()->is_run())
             env.travel_trail.push_back(you.pos());
-
-        _apply_move_time_taken(additional_time_taken);
 
         move.reset();
         you.turn_is_over = true;
@@ -1128,23 +1174,6 @@ void move_player_action(coord_def move)
         move.reset();
         return;
     }
-    else if (!targ_pass && env.grid(targ) == DNGN_MALIGN_GATEWAY
-             && !attacking && !you.is_stationary())
-    {
-        if (!crawl_state.disables[DIS_CONFIRMATIONS]
-            && !prompt_dangerous_portal(env.grid(targ)))
-        {
-            // No rampage check because the portal blocks the
-            // rampage tracer
-            return;
-        }
-
-        move.reset();
-        you.turn_is_over = true;
-
-        _entered_malign_portal(&you);
-        return;
-    }
     else if (!targ_pass && !attacking)
     {
         // No rampage check here, since you can't rampage at walls
@@ -1156,6 +1185,8 @@ void move_player_action(coord_def move)
             mpr("The endless sea of lava is not a nice place.");
         else if (feat_is_tree(env.grid(targ)) && you_worship(GOD_FEDHAS))
             mpr("You cannot walk through the dense trees.");
+        else if (!try_to_swap && env.grid(targ) == DNGN_MALIGN_GATEWAY)
+            mpr("The malign portal rejects you as you step towards it.");
 
         stop_running();
         move.reset();

@@ -14,6 +14,7 @@
 #include <cstdlib>
 #include <cstring>
 
+#include "act-iter.h" // monster_near_iterator
 #include "areas.h"
 #include "art-enum.h"
 #include "coordit.h"
@@ -1168,7 +1169,6 @@ string casting_uselessness_reason(spell_type spell, bool temp)
     switch (spell)
     {
     case SPELL_ANIMATE_DEAD:
-    case SPELL_ANIMATE_SKELETON:
     case SPELL_DEATH_CHANNEL:
     case SPELL_SIMULACRUM:
     case SPELL_INFESTATION:
@@ -1179,7 +1179,6 @@ string casting_uselessness_reason(spell_type spell, bool temp)
     default:
         break;
     }
-
 
     return "";
 }
@@ -1289,17 +1288,6 @@ string spell_uselessness_reason(spell_type spell, bool temp, bool prevent,
             return "your current blood level is not sufficient.";
         break;
 
-    case SPELL_EXCRUCIATING_WOUNDS:
-        if (is_useless_skill(SK_NECROMANCY))
-            return "you lack the necromantic skill to inflict true pain.";
-        if (temp
-            && (!you.weapon()
-                || you.weapon()->base_type != OBJ_WEAPONS
-                || !is_brandable_weapon(*you.weapon(), true)))
-        {
-            return "you aren't wielding a brandable weapon.";
-        }
-        // intentional fallthrough to portal projectile
     case SPELL_PORTAL_PROJECTILE:
         if (you.has_mutation(MUT_NO_GRASPING))
             return "this spell is useless without hands.";
@@ -1376,36 +1364,37 @@ string spell_uselessness_reason(spell_type spell, bool temp, bool prevent,
     case SPELL_PASSWALL:
         // the full check would need a real spellpower here, so we just check
         // a drastically simplified version of it
-        if (temp && you.is_stationary())
+        if (!temp)
+            break;
+        if (you.is_stationary())
             return "you can't move.";
-        if (temp && !passwall_simplified_check(you))
+        if (!passwall_simplified_check(you))
             return "you aren't next to any passable walls.";
+        if (you.is_constricted())
+            return "you're being held away from the wall.";
+        break;
+
+    case SPELL_CORPSE_ROT:
+        if (have_passive(passive_t::goldify_corpses))
+            return "necromancy does not work on golden corpses.";
         break;
 
     case SPELL_ANIMATE_DEAD:
-        if (temp && !animate_dead(&you, 1, BEH_FRIENDLY, MHITYOU, &you, "", GOD_NO_GOD, false))
-            return "there is nothing nearby to animate!";
-        break;
-
-    case SPELL_ANIMATE_SKELETON:
-        if (temp && find_animatable_skeletons(you.pos()).empty())
-            return "there is nothing nearby to animate!";
-        break;
     case SPELL_SIMULACRUM:
-        if (temp && find_simulacrable_corpse(you.pos()) < 0)
-            return "there is nothing here to animate!";
-        break;
-
-    case SPELL_DEATH_CHANNEL:
+        if (have_passive(passive_t::goldify_corpses))
+            return "necromancy does not work on golden corpses.";
         if (have_passive(passive_t::reaping))
             return "you are already reaping souls!";
         break;
 
-    case SPELL_CORPSE_ROT:
-        if (temp && corpse_rot(&you, 0, false) == spret::abort)
-            return "there is nothing fresh enough to decay nearby.";
+    case SPELL_DEATH_CHANNEL:
+        if (temp && you.duration[DUR_DEATH_CHANNEL])
+            return "you are already channeling the dead.";
+        if (have_passive(passive_t::reaping))
+            return "you are already reaping souls!";
+        break;
+
         // fallthrough
-    case SPELL_POISONOUS_VAPOURS:
     case SPELL_CONJURE_FLAME:
     case SPELL_POISONOUS_CLOUD:
     case SPELL_FREEZING_CLOUD:
@@ -1441,11 +1430,6 @@ string spell_uselessness_reason(spell_type spell, bool temp, bool prevent,
         {
             return "you lack blood to transform.";
         }
-        break;
-
-    case SPELL_SANDBLAST:
-        if (temp && sandblast_find_ammo().first == 0)
-            return "you don't have any stones to cast with.";
         break;
 
     case SPELL_NOXIOUS_BOG:
@@ -1550,7 +1534,8 @@ bool spell_no_hostile_in_range(spell_type spell)
         {
             test_targ.target = *ri;
             const monster* mons = monster_at(*ri);
-            if (mons && cast_poisonous_vapours(0, test_targ, true, true)
+            if (mons && !mons->wont_attack()
+                && cast_poisonous_vapours(0, test_targ, true, true)
                                                             == spret::success)
             {
                 return false;
@@ -1626,6 +1611,22 @@ bool spell_no_hostile_in_range(spell_type spell)
     case SPELL_SCORCH:
         return find_near_hostiles(range).empty();
 
+    case SPELL_ANGUISH:
+        for (monster_near_iterator mi(you.pos(), LOS_NO_TRANS); mi; ++mi)
+        {
+            const monster &mon = **mi;
+            if (you.can_see(mon)
+                && mons_intel(mon) > I_BRAINLESS
+                && mon.willpower() != WILL_INVULN
+                && !mons_atts_aligned(you.temp_attitude(), mon.attitude)
+                && !mon.has_ench(ENCH_ANGUISH))
+            {
+                return false;
+            }
+
+        }
+        return true; // TODO
+
     default:
         break;
     }
@@ -1639,7 +1640,11 @@ bool spell_no_hostile_in_range(spell_type spell)
     if (testbits(flags, spflag::helpful))
         return false;
 
-    const bool neutral = testbits(flags, spflag::neutral);
+    // For chosing default targets and prompting we don't treat Inner Flame as
+    // neutral, since the seeping flames trigger conducts and harm the monster
+    // before it explodes.
+    const bool allow_friends = testbits(flags, spflag::neutral)
+                               || spell == SPELL_INNER_FLAME;
 
     bolt beam;
     beam.flavour = BEAM_VISUAL;
@@ -1705,7 +1710,7 @@ bool spell_no_hostile_in_range(spell_type spell)
                 tempbeam.fire();
 
             if (tempbeam.foe_info.count > 0
-                || neutral && tempbeam.friend_info.count > 0)
+                || allow_friends && tempbeam.friend_info.count > 0)
             {
                 found = true;
                 break;
@@ -1888,12 +1893,12 @@ const set<spell_type> removed_spells =
     SPELL_SUMMON_BUTTERFLIES,
     SPELL_SUMMON_ELEMENTAL,
     SPELL_SUMMON_RAKSHASA,
-    SPELL_SUMMON_SCORPIONS,
     SPELL_SUMMON_SWARM,
     SPELL_SUMMON_TWISTER,
     SPELL_SUNRAY,
     SPELL_SURE_BLADE,
     SPELL_THROW,
+    SPELL_TOMB_OF_DOROKLOHE,
     SPELL_VAMPIRE_SUMMON,
     SPELL_WARP_BRAND,
     SPELL_WEAVE_SHADOWS,
@@ -1906,6 +1911,7 @@ const set<spell_type> removed_spells =
     SPELL_VORTEX,
     SPELL_GOAD_BEASTS,
     SPELL_TELEPORT_SELF,
+    SPELL_EXCRUCIATING_WOUNDS,
 #endif
 };
 

@@ -169,18 +169,19 @@ Nothing but the mythical salamander can cross this without flight.
 Some shallow water
 
 A pool of cloudy, waist-deep water. Those well-adapted to water can swim
-through it; other creatures can wade through it slowly. Non-swimmers will
-occasionally fail to attack in melee when wading through shallow water,
-although large creatures are able to keep their balance and avoid fumbling.
+through it and attack normally. Non-swimmers must wade through the water slowly
+and will occasionally fail to attack in melee when wading through shallow
+water; although large creatures are able to keep their balance, move at a
+normal speed, and avoid fumbling.
 %%%%
 A toxic bog
 
 A filthy pool of poisonous, waist-deep sludge. Wading or swimming through the
 sludge will damage and poison any creature, even those resistant to poison.
-Those well-adapted to water can swim through it; other creatures can wade
-through it slowly. Non-swimmers will occasionally fail to attack in melee when
-wading through shallow water, although large creatures are able to keep their
-balance and avoid fumbling.
+Those well-adapted to water can swim through it and attack normally.
+Non-swimmers must wade through the water slowly and will occasionally fail to
+attack in melee when wading through shallow water; although large creatures are
+able to keep their balance, move at a normal speed, and avoid fumbling.
 %%%%
 The open sea
 
@@ -351,6 +352,11 @@ A fountain of sparkling water
 
 A decorative fountain, flowing with brightly sparkling water.
 %%%%
+A runelight
+
+An unearthly, glittering light, floating and twisting in midair. A Rune of
+Zot is surely nearby, its power overspilling to cause this spectacular sight.
+%%%%
 # column_ruins
 A broken pillar
 
@@ -418,6 +424,10 @@ A gateway to the ashen valley of Gehenna
 
 A gateway leading to Gehenna.
 %%%%
+A gateway leading out of Gehenna
+
+A gateway leading back to the Vestibule of Hell.
+%%%%
 A gateway to Hell
 
 A gateway leading to the Vestibule of Hell. Few would go there voluntarily.
@@ -426,13 +436,25 @@ A gateway to the Iron City of Dis
 
 A gateway leading to the Iron City of Dis.
 %%%%
+A gateway leading out of Dis
+
+<A gateway leading out of Gehenna>
+%%%%
 A gateway to the decaying netherworld of Tartarus
 
 A gateway leading to Tartarus.
 %%%%
+A gateway leading out of Tartarus
+
+<A gateway leading out of Gehenna>
+%%%%
 A gateway to the freezing wastes of Cocytus
 
 A gateway leading to Cocytus.
+%%%%
+A gateway leading out of Cocytus
+
+<A gateway leading out of Gehenna>
 %%%%
 
 A hole to the Spider Nest
@@ -537,11 +559,11 @@ this location to return back through the transporter.
 ########################################################################
 An open door
 
-A wooden door.
+An open wooden door. If reopened by a monster, it has a chance of breaking.
 %%%%
 A closed door
 
-A wooden door.
+A closed wooden door. If opened by a monster, it has a chance of breaking.
 %%%%
 A broken door
 
@@ -550,11 +572,13 @@ to get this properly closed again.
 %%%%
 An open translucent door
 
-A door made from magically translucent wood.
+An open door made from magically translucent wood. If reopened by a monster,
+it has a chance of breaking.
 %%%%
 A closed translucent door
 
-A door made from magically translucent wood.
+A closed door made from magically translucent wood. If opened by a monster, it
+has a chance of breaking.
 %%%%
 A broken translucent door
 
@@ -569,7 +593,8 @@ A runed door
 
 A door, covered in runic writing. It looks like there is something special
 behind it — perhaps danger, perhaps treasure. You may break the runes by
-opening it like any other door.
+opening it like any other door, but creatures of the dungeon will not dare
+to try.
 %%%%
 A large open door
 
@@ -1013,7 +1038,7 @@ A petrified tree
 An ancient tree, long ago passed from biology into geology. While no longer
 wooden in a material sense, it retains the spiritual qualities of a tree.
 %%%%
-# due_jungle_book (Lair:6)
+# due_jungle_book (Lair:$)
 An elephant-shaped statue
 
 A worn granite statue depicting an elephant standing guard.

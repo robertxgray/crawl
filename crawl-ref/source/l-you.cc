@@ -244,7 +244,7 @@ LUARET1(you_stealth_pips, number, stealth_pips())
  */
 LUARET1(you_willpower, number, player_willpower() / WL_PIP)
 /*** Drowning resistance (rDrown).
- * @treturn int resistance level
+ * @treturn boolean
  * @function res_drowning
  */
 LUARET1(you_res_drowning, boolean, you.res_water_drowning())
@@ -1204,32 +1204,23 @@ LUAFN(you_status)
 
 LUAFN(you_quiver_valid)
 {
-    // 0 = launcher quiver
-    // 1 = regular quiver
-    // this order is slightly weird but is aimed at forward compatibility
-    const int q_num = luaL_safe_checkint(ls, 1);
-    auto &q = q_num == 0 ? you.launcher_action : you.quiver_action;
-    PLUARET(boolean, !q.is_empty() && q.get()->is_valid());
+    PLUARET(boolean, !you.quiver_action.is_empty()
+                   && you.quiver_action.get()->is_valid());
 }
 
 LUAFN(you_quiver_enabled)
 {
-    // 0 = launcher quiver
-    // 1 = regular quiver
-    const int q_num = luaL_safe_checkint(ls, 1);
-    auto &q = q_num == 0 ? you.launcher_action : you.quiver_action;
-    PLUARET(boolean, !q.is_empty() && q.get()->is_enabled());
+    PLUARET(boolean, !you.quiver_action.is_empty()
+                   && you.quiver_action.get()->is_enabled());
 }
 
 LUAFN(you_quiver_uses_mp)
 {
-    // ignore launcher quiver here
     PLUARET(boolean, quiver::get_secondary_action()->uses_mp());
 }
 
 LUAFN(you_quiver_allows_autofight)
 {
-    // don't bother with launcher quiver
     PLUARET(boolean, quiver::get_secondary_action()->allow_autofight());
 }
 

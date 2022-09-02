@@ -330,9 +330,8 @@ void change_monster_type(monster* mons, monster_type targetc)
     mons->props.erase(SEEN_SPELLS_KEY);
 
     mons->flags = flags;
-    // Line above might clear melee and/or spell flags; restore.
+    // Line above might clear melee flags; restore.
     mons->bind_melee_flags();
-    mons->bind_spell_flags();
 
     // Forget various speech/shout Lua functions.
     mons->props.erase(SPEECH_PREFIX_KEY);
@@ -699,7 +698,7 @@ void slimify_monster(monster* mon)
 
     monster_polymorph(mon, target, PPT_SLIME);
 
-    mon->attitude = ATT_STRICT_NEUTRAL;
+    mon->attitude = ATT_GOOD_NEUTRAL;
 
     mons_make_god_gift(*mon, GOD_JIYVA);
 
@@ -708,6 +707,9 @@ void slimify_monster(monster* mon)
     mon->del_ench(ENCH_SHAPESHIFTER);
 
     mons_att_changed(mon);
+
+    if (mons_is_elven_twin(mon))
+        elven_twin_died(mon, false, KILL_YOU, MID_PLAYER);
 }
 
 void seen_monster(monster* mons)
@@ -716,10 +718,6 @@ void seen_monster(monster* mons)
 
     // id equipment (do this every time we see them, it may have changed)
     view_monster_equipment(mons);
-
-    item_def* weapon = mons->weapon();
-    if (weapon && is_range_weapon(*weapon))
-        mons->flags |= MF_SEEN_RANGED;
 
     // Monster was viewed this turn
     mons->flags |= MF_WAS_IN_VIEW;

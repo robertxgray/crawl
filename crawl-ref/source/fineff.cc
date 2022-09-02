@@ -58,6 +58,13 @@ bool mirror_damage_fineff::mergeable(const final_effect &fe) const
     return o && att == o->att && def == o->def;
 }
 
+bool anguish_fineff::mergeable(const final_effect &fe) const
+{
+    const anguish_fineff *o =
+        dynamic_cast<const anguish_fineff *>(&fe);
+    return o && att == o->att;
+}
+
 bool ru_retribution_fineff::mergeable(const final_effect &fe) const
 {
     const ru_retribution_fineff *o =
@@ -144,6 +151,15 @@ void mirror_damage_fineff::merge(const final_effect &fe)
     damage += mdfe->damage;
 }
 
+void anguish_fineff::merge(const final_effect &fe)
+{
+    const anguish_fineff *afe =
+        dynamic_cast<const anguish_fineff *>(&fe);
+    ASSERT(afe);
+    ASSERT(mergeable(*afe));
+    damage += afe->damage;
+}
+
 void ru_retribution_fineff::merge(const final_effect &fe)
 {
     const ru_retribution_fineff *mdfe =
@@ -198,7 +214,7 @@ void mirror_damage_fineff::fire()
         return;
     // defender being dead is ok, if we killed them we still suffer
 
-    god_acting gdact(GOD_YREDELEMNUL);
+    god_acting gdact(GOD_YREDELEMNUL); // XXX: remove?
 
     if (att == MID_PLAYER)
     {
@@ -213,22 +229,23 @@ void mirror_damage_fineff::fire()
             mpr("Your damage is reflected back at you!");
         ouch(damage, KILLED_BY_MIRROR_DAMAGE);
     }
-    else if (def == MID_PLAYER)
-    {
-        simple_god_message(" mirrors your injury!");
-
-        attack->hurt(&you, damage);
-
-        if (attack->alive())
-            print_wounds(*monster_by_mid(att));
-
-        lose_piety(isqrt_ceil(damage));
-    }
     else
     {
         simple_monster_message(*monster_by_mid(att), " suffers a backlash!");
         attack->hurt(defender(), damage);
     }
+}
+
+void anguish_fineff::fire()
+{
+    actor *attack = attacker();
+    if (!attack || !attack->alive())
+        return;
+
+    const string punct = attack_strength_punctuation(damage);
+    const string msg = make_stringf(" is wracked by anguish%s", punct.c_str());
+    simple_monster_message(*monster_by_mid(att), msg.c_str());
+    attack->hurt(monster_by_mid(MID_YOU_FAULTLESS), damage);
 }
 
 void ru_retribution_fineff::fire()
@@ -277,6 +294,9 @@ void blink_fineff::fire()
     coord_def target;
     for (fair_adjacent_iterator ai(defend->pos()); ai; ++ai)
     {
+        // No blinking into teleport closets.
+        if (testbits(env.pgrid(*ai), FPROP_NO_TELE_INTO))
+            continue;
         // XXX: allow fedhasites to be blinked into plants?
         if (actor_at(*ai) || !pal->is_habitable(*ai))
             continue;
@@ -328,7 +348,7 @@ void trj_spawn_fineff::fire()
     for (int i = 0; i < tospawn; ++i)
     {
         const monster_type jelly = royal_jelly_ejectable_monster();
-        coord_def jpos = find_newmons_square_contiguous(jelly, posn);
+        coord_def jpos = find_newmons_square_contiguous(jelly, posn, 3, false);
         if (!in_bounds(jpos))
             continue;
 
@@ -607,8 +627,9 @@ void bennu_revive_fineff::fire()
 
 void avoided_death_fineff::fire()
 {
-    ASSERT(defender()->is_monster());
+    ASSERT(defender() && defender()->is_monster());
     defender()->as_monster()->hit_points = hp;
+    defender()->as_monster()->flags &= ~MF_PENDING_REVIVAL;
 }
 
 void infestation_death_fineff::fire()
@@ -634,7 +655,7 @@ void make_derived_undead_fineff::fire()
 {
     if (monster *undead = create_monster(mg))
     {
-        if (!message.empty())
+        if (!message.empty() && you.can_see(*undead))
             mpr(message);
 
         // If the original monster has been levelled up, its HD might be
@@ -651,12 +672,17 @@ void make_derived_undead_fineff::fire()
             name_zombie(*undead, mg.base_type, mg.mname);
 
         if (mg.god != GOD_YREDELEMNUL)
-            undead->add_ench(mon_enchant(ENCH_FAKE_ABJURATION, 5));
-        if (!agent.empty())
         {
-            mons_add_blame(undead,
-                "animated by " + agent);
+            if (undead->type == MONS_ZOMBIE)
+                undead->props[ANIMATE_DEAD_KEY] = true;
+            else
+            {
+                int dur = undead->type == MONS_SKELETON ? 3 : 5;
+                undead->add_ench(mon_enchant(ENCH_FAKE_ABJURATION, dur));
+            }
         }
+        if (!agent.empty())
+            mons_add_blame(undead, "animated by " + agent);
     }
 }
 

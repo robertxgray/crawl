@@ -58,8 +58,8 @@ enum duration_type
     DUR_DEFLECT_MISSILES,
     DUR_PHASE_SHIFT,
     DUR_SEE_INVISIBLE,
-#endif
     DUR_EXCRUCIATING_WOUNDS,
+#endif
     DUR_DEMONIC_GUARDIAN,       // demonic guardian timeout
     DUR_POWERED_BY_DEATH,
     DUR_SILENCE,
@@ -212,7 +212,9 @@ enum duration_type
     DUR_BERSERK_COOLDOWN,
     DUR_RECITE_COOLDOWN,
     DUR_ACROBAT,
+#if TAG_MAJOR_VERSION == 34
     DUR_SHAFT_IMMUNITY,
+#endif
     DUR_NOXIOUS_BOG,
     DUR_FROZEN_RAMPARTS,
 #if TAG_MAJOR_VERSION == 34
@@ -228,5 +230,7 @@ enum duration_type
     DUR_BLINK_COOLDOWN,
     DUR_OOZEMANCY,
     DUR_FIERY_ARMOUR,
+    DUR_ANIMATE_DEAD,
+    DUR_CORPSE_ROT,
     NUM_DURATIONS
 };

@@ -71,6 +71,8 @@ static const vector<monster_info_flag_name> monster_info_flag_names = {
     { MB_CLOUD_RING_DRAINING, "clouds", "surrounded by negative energy", "clouds" },
     { MB_CLOUD_RING_ACID, "clouds", "surrounded by acidic fog", "clouds" },
     { MB_CLOUD_RING_MIASMA, "clouds", "surrounded by foul miasma", "clouds" },
+    { MB_FIRE_CHAMPION, "flame-wreathed", "flame-wreathed", "flame-wreathed"},
+    { MB_SILENCE_IMMUNE, "unsilenced", "unaffected by silence", "unsilenced" },
     // Vulnerabilities
     { MB_POSSESSABLE, "possessable", "possessable", "possessable"},
     { MB_CAUGHT, "caught", "entangled in a net", "caught"},
@@ -82,6 +84,8 @@ static const vector<monster_info_flag_name> monster_info_flag_names = {
     { MB_SLEEPING, "asleep", "asleep", "asleep"},
     { MB_UNAWARE, "unaware", "unaware", "unaware"},
     { MB_BLIND, "blind", "blind", "blind"},
+    { MB_DISTRACTED_ONLY, "distracted", "not watching you", "distracted"},
+    { MB_CANT_SEE_YOU, "unable to see you", "unable to see you", "unable to see you"},
     { MB_INFESTATION, "infested", "infested", "infested"},
     // Debuffs
     { MB_DUMB, "stupefied", "stupefied", "stupefied"},
@@ -116,7 +120,7 @@ static const vector<monster_info_flag_name> monster_info_flag_names = {
     { MB_SICK, "sick", "sick", "sick"},
     { MB_WEAK, "weak", "weak", "weak"},
     { MB_LIGHTLY_DRAINED, "drained", "lightly drained", "drained"},
-    { MB_HEAVILY_DRAINED, "drained", "heavily drained", "drained"},
+    { MB_HEAVILY_DRAINED, "very drained", "heavily drained", "very drained"},
     { MB_SAP_MAGIC, "magic-sapped", "magic-sapped", "magic-sapped"},
     { MB_GLOWING, "corona", "softly glowing", "coronas"},
     { MB_WATERLOGGED, "waterlogged", "waterlogged", "waterlogged"},
@@ -125,5 +129,9 @@ static const vector<monster_info_flag_name> monster_info_flag_names = {
     { MB_PAIN_BOND, "pain bonded", "sharing @possessive@ pain", "pain bonded"},
     { MB_IDEALISED, "idealised", "idealised", "idealised"},
     { MB_ALLY_TARGET, "ally target", "ally target", "ally target"},
-    { MB_FIRE_CHAMPION, "flame-wreathed", "flame-wreathed", "flame-wreathed"},
+    { MB_ANTIMAGIC, "magic disrupted", "magic disrupted", "magic disrupted"},
+    { MB_ANGUISH, "anguished", "anguished", "anguished"},
+    { MB_SIMULACRUM, "simulacrum", "simulacrum", "simulacrum"},
+    { MB_REFLECTING, "reflecting", "reflecting blocked projectiles", "reflecting"},
+    { MB_TELEPORTING, "teleporting", "about to teleport", "teleporting"},
 };

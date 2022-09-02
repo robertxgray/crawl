@@ -34,12 +34,12 @@
 #include "status.h"
 #include "stringutil.h"
 #include "tag-version.h"
-#include "timed-effects.h" // zot clock
 #include "transform.h"
 #include "ui.h"
 #include "unicode.h"
 #include "view.h"
 #include "xom.h"
+#include "zot.h" // zot clock
 
 #ifdef WIZARD
 
@@ -390,16 +390,23 @@ void wizard_set_skill_level(skill_type skill)
         return;
     }
 
+    if (is_useless_skill(skill))
+    {
+        mpr("Can't change a useless skill.");
+        return;
+    }
+
     mpr(skill_name(skill));
-    double amount = prompt_for_float("To what level? ");
+    const double old_amount = you.skill(skill, 10, true) * 0.1;
+    string prompt = make_stringf("To what level? (current = %.1f) ",
+                                 old_amount);
+    double amount = prompt_for_float(prompt.c_str());
 
     if (amount < 0 || amount > 27)
     {
         canned_msg(MSG_OK);
         return;
     }
-
-    const int old_amount = you.skills[skill];
 
     set_skill_level(skill, amount);
 
@@ -727,7 +734,7 @@ static void reset_ds_muts_from_schedule(int xl)
                 // there. delete_mutation won't delete mutations otherwise.
                 // This step doesn't affect temporary mutations.
                 you.innate_mutation[mut]--;
-                delete_mutation(mut, "level change", false, true, false, false);
+                delete_mutation(mut, "level change", false, true, false);
             }
             if (you.innate_mutation[mut] < innate_levels)
                 perma_mutate(mut, innate_levels - you.innate_mutation[mut], "level change");

@@ -37,6 +37,7 @@ int branch_ood_cap(branch_type branch)
         return 12;
     case BRANCH_ELF:
     case BRANCH_SWAMP:
+    case BRANCH_SPIDER:
         return 7;
     case BRANCH_CRYPT:
     case BRANCH_TOMB:
@@ -109,7 +110,8 @@ bool positioned_monster_picker::veto(monster_type mon)
     if (in_bounds(pos) && !monster_habitable_grid(mon, env.grid(pos)))
         return true;
     // Optional positional veto
-    if (posveto && posveto(mon, pos)) return true;
+    if (posveto && posveto(mon, pos))
+        return true;
     return monster_picker::veto(mon);
 }
 
@@ -245,6 +247,16 @@ int monster_pop_depth_avg(branch_type branch, monster_type m)
             return max(0, (pop.minr + pop.maxr) / 2);
     // negative values *are* sometimes used in the data, but the above max will
     // prevent them from ever being naturally returned as an average.
+    return -1;
+}
+
+// if a monster is ood, how far ood is it? If it's not ood but in the branch
+// data, return 0. If it's not in the branch data, return -1.
+int monster_how_ood(branch_type branch, int depth, monster_type m)
+{
+    for (const pop_entry& pop : population[branch])
+        if (pop.value == m)
+            return max(0, pop.minr - depth);
     return -1;
 }
 

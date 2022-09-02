@@ -81,6 +81,49 @@ spret cast_death_channel(int pow, god_type god, bool fail)
     return spret::success;
 }
 
+static bool _dismiss_dead()
+{
+    bool found = false;
+    for (monster_iterator mi; mi; ++mi)
+    {
+        if (!*mi)
+            continue;
+
+        monster &mon = **mi;
+        if (!mon.alive()
+            || !mon.friendly()
+            || mon.type != MONS_ZOMBIE
+            || mon.is_summoned()
+            || is_yred_undead_slave(mon))
+        {
+            continue;
+        }
+
+        // crumble into dust...
+        mon_enchant abj(ENCH_FAKE_ABJURATION, 0, 0, 1);
+        mon.add_ench(abj);
+        abj.duration = 0;
+        mon.update_ench(abj);
+        found = true;
+    }
+    return found;
+}
+
+spret cast_animate_dead(int pow, bool fail)
+{
+    fail_check();
+
+    if (_dismiss_dead())
+        mpr("You dismiss your zombies and call upon the dead to rise afresh.");
+    else
+        mpr("You call upon the dead to rise.");
+
+    you.increase_duration(DUR_ANIMATE_DEAD, 20 + random2(1 + pow), 100);
+    you.props[ANIMATE_DEAD_POWER_KEY] = pow;
+
+    return spret::success;
+}
+
 void start_recall(recall_t type)
 {
     // Assemble the recall list.
@@ -384,6 +427,10 @@ spret cast_passwall(const coord_def& c, int pow, bool fail)
 {
     // prompt player to end position-based ice spells
     if (cancel_harmful_move(false))
+        return spret::abort;
+
+    // held away from the wall
+    if (you.is_constricted())
         return spret::abort;
 
     coord_def delta = c - you.pos();

@@ -24,11 +24,11 @@
 #include "art-enum.h"
 #include "beam.h"
 #include "chardump.h"
+#include "cloud.h"
 #include "colour.h"
 #include "delay.h"
 #include "dgn-event.h"
 #include "end.h"
-#include "env.h"
 #include "fight.h"
 #include "files.h"
 #include "fineff.h"
@@ -38,6 +38,7 @@
 #include "hiscores.h"
 #include "invent.h"
 #include "item-prop.h"
+#include "items.h"
 #include "libutil.h"
 #include "message.h"
 #include "mgen-data.h"
@@ -58,6 +59,7 @@
 #include "shopping.h"
 #include "shout.h"
 #include "spl-clouds.h"
+#include "spl-goditem.h"
 #include "spl-selfench.h"
 #include "state.h"
 #include "stringutil.h"
@@ -507,6 +509,18 @@ static void _maybe_ru_retribution(int dam, mid_t death_source)
     }
 }
 
+static void _maybe_inflict_anguish(int dam, mid_t death_source)
+{
+    const monster* mons = monster_by_mid(death_source);
+    if (!mons
+        || !mons->alive()
+        || !mons->has_ench(ENCH_ANGUISH))
+    {
+        return;
+    }
+    anguish_fineff::schedule(mons, dam);
+}
+
 static void _maybe_spawn_rats(int dam, kill_method_type death_type)
 {
     if (dam <= 0
@@ -516,9 +530,9 @@ static void _maybe_spawn_rats(int dam, kill_method_type death_type)
         return;
     }
 
-    // chance rises linearly with damage taken, up to 50% at half hp.
+    // chance rises linearly with damage taken, up to 75% at half hp.
     const int capped_dam = min(dam, you.hp_max / 2);
-    if (!x_chance_in_y(capped_dam, you.hp_max))
+    if (!x_chance_in_y(capped_dam * 3, you.hp_max * 2))
         return;
 
     auto rats = { MONS_HELL_RAT, MONS_RIVER_RAT };
@@ -566,7 +580,7 @@ static void _maybe_spawn_monsters(int dam, kill_method_type death_type,
     monster* damager = monster_by_mid(death_source);
     // We need to exclude acid damage and similar things or this function
     // will crash later.
-    if (!damager)
+    if (!damager || death_source == MID_YOU_FAULTLESS)
         return;
 
     monster_type mon;
@@ -595,7 +609,8 @@ static void _maybe_spawn_monsters(int dam, kill_method_type death_type,
         int count_created = 0;
         for (int i = 0; i < how_many; ++i)
         {
-            mgen_data mg(mon, BEH_FRIENDLY, you.pos(), damager->mindex());
+            const int mindex = damager->alive() ? damager->mindex() : MHITNOT;
+            mgen_data mg(mon, BEH_FRIENDLY, you.pos(), mindex);
             mg.set_summoned(&you, 2, 0, you.religion);
 
             if (create_monster(mg))
@@ -772,9 +787,10 @@ void reset_damage_counters()
     you.source_damage = 0;
 }
 
+#if TAG_MAJOR_VERSION == 34
 bool can_shave_damage()
 {
-    return you.species == SP_DEEP_DWARF;
+    return you.species == SP_DEEP_DWARF || you.species == SP_MAYFLYTAUR;
 }
 
 int do_shave_damage(int dam)
@@ -789,17 +805,21 @@ int do_shave_damage(int dam)
 
     return dam;
 }
+#endif
 
-// Determine what's threatening for purposes of sacrifice drink and reading.
-// the statuses are guaranteed not to happen if the incoming damage is less
-// than 5% max hp. Otherwise, they scale up with damage taken and with lower
-// health, becoming certain at 20% max health damage.
-static bool _is_damage_threatening (int damage_fraction_of_hp)
+// Determine what's threatening for purposes of no drink and no scroll mutation.
+// The statuses are guaranteed not to happen if the incoming damage is less
+// than 12/5% max hp and if the remaining hp is higher than 50/80% based on the
+// mutation tier. Otherwise, they scale up with damage taken and with lower
+// health, becoming certain at 50/20% max health damage.
+static bool _is_damage_threatening (int damage_fraction_of_hp, int mut_level)
 {
     const int hp_fraction = you.hp * 100 / you.hp_max;
-    return damage_fraction_of_hp > 5
-            && hp_fraction <= 85
-            && (damage_fraction_of_hp + random2(20) >= 20
+    const int safe_damage_fraction = mut_level == 1 ? 12 : 5;
+    const int scary_damage_fraction = mut_level == 1 ? 50 : 20;
+    return damage_fraction_of_hp > safe_damage_fraction
+            && hp_fraction <= 100 - scary_damage_fraction + safe_damage_fraction
+            && (damage_fraction_of_hp + random2(scary_damage_fraction) >= scary_damage_fraction
                 || random2(100) > hp_fraction);
 }
 
@@ -860,11 +880,13 @@ void ouch(int dam, kill_method_type death_type, mid_t source, const char *aux,
     if (dam != INSTANT_DEATH)
         dam = _apply_extra_harm(dam, source);
 
+#if TAG_MAJOR_VERSION == 34
     if (can_shave_damage() && dam != INSTANT_DEATH
         && death_type != KILLED_BY_POISON)
     {
         dam = max(0, do_shave_damage(dam));
     }
+#endif
 
     if (dam != INSTANT_DEATH)
     {
@@ -873,6 +895,8 @@ void ouch(int dam, kill_method_type death_type, mid_t source, const char *aux,
             drain_amount = (dam - (dam / 2));
             dam /= 2;
         }
+        if (you.may_pruneify() && you.cannot_act())
+            dam /= 2;
         if (you.petrified())
             dam /= 2;
         else if (you.petrifying())
@@ -898,12 +922,24 @@ void ouch(int dam, kill_method_type death_type, mid_t source, const char *aux,
                            && (death_type == KILLED_BY_LAVA
                                || death_type == KILLED_BY_WATER);
 
-    // death's door protects against everything but falling into water/lava,
-    // Zot, excessive rot, leaving the dungeon, or quitting.
-    if (you.duration[DUR_DEATHS_DOOR] && !env_death && !non_death
-        && death_type != KILLED_BY_ZOT && you.hp_max > 0)
+    if (!env_death && !non_death && death_type != KILLED_BY_ZOT
+        && you.hp_max > 0)
     {
-        return;
+        // death's door protects against everything but falling into
+        // water/lava, Zot, excessive rot, leaving the dungeon, or quitting.
+        if (you.duration[DUR_DEATHS_DOOR])
+            return;
+        // the dreamshard necklace protects from any fatal blow or death source
+        // that death's door would protect from, plus a chance of activating on
+        // hits for more than 80% of a player's remaining hitpoints
+        // (but doesn't activate while in death's door)
+        else if (player_equip_unrand(UNRAND_DREAMSHARD_NECKLACE)
+                 && (dam >= you.hp
+                     || ((dam * 100) / you.hp) > 80 && coinflip()))
+        {
+            dreamshard_shatter();
+            return;
+        }
     }
 
     if (dam > 0 && death_type != KILLED_BY_POISON)
@@ -914,7 +950,8 @@ void ouch(int dam, kill_method_type death_type, mid_t source, const char *aux,
         // don't always trigger in unison when you have both.
         if (you.get_mutation_level(MUT_READ_SAFETY))
         {
-            if (_is_damage_threatening(damage_fraction_of_hp))
+            if (_is_damage_threatening(damage_fraction_of_hp,
+                                       you.get_mutation_level(MUT_READ_SAFETY)))
             {
                 if (!you.duration[DUR_NO_SCROLLS])
                     mpr("You feel threatened and lose the ability to read scrolls!");
@@ -925,7 +962,8 @@ void ouch(int dam, kill_method_type death_type, mid_t source, const char *aux,
 
         if (you.get_mutation_level(MUT_DRINK_SAFETY))
         {
-            if (_is_damage_threatening(damage_fraction_of_hp))
+            if (_is_damage_threatening(damage_fraction_of_hp,
+                                       you.get_mutation_level(MUT_DRINK_SAFETY)))
             {
                 if (!you.duration[DUR_NO_POTIONS])
                     mpr("You feel threatened and lose the ability to drink potions!");
@@ -1008,6 +1046,7 @@ void ouch(int dam, kill_method_type death_type, mid_t source, const char *aux,
 
             _deteriorate(dam);
             _maybe_ru_retribution(dam, source);
+            _maybe_inflict_anguish(dam, source);
             _maybe_spawn_monsters(dam, death_type, source);
             _maybe_spawn_rats(dam, death_type);
             _maybe_summon_demonic_guardian(dam, death_type);
@@ -1015,6 +1054,7 @@ void ouch(int dam, kill_method_type death_type, mid_t source, const char *aux,
             _powered_by_pain(dam);
             if (sanguine_armour_valid())
                 activate_sanguine_armour();
+            refresh_meek_bonus();
             if (death_type != KILLED_BY_POISON)
             {
                 _maybe_corrode();
@@ -1024,7 +1064,7 @@ void ouch(int dam, kill_method_type death_type, mid_t source, const char *aux,
                 drain_player(drain_amount, true, true);
         }
         if (you.hp > 0)
-          return;
+            return;
     }
 
     // Is the player being killed by a direct act of Xom?
@@ -1135,7 +1175,8 @@ void ouch(int dam, kill_method_type death_type, mid_t source, const char *aux,
         xom_death_message((kill_method_type) se.get_death_type());
         more();
 
-        _place_player_corpse(death_type == KILLED_BY_DISINT);
+        if (death_type != KILLED_BY_ZOT)
+            _place_player_corpse(death_type == KILLED_BY_DISINT);
         return;
     }
 

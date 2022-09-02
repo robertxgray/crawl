@@ -39,6 +39,13 @@ function ($, comm, client, ui, enums, cr, util, scroller, main, gui, player) {
     function _fmt_spells_list(root, spellset, colour)
     {
         var $container = root.find("#spellset_placeholder");
+        // XX this container only seems to be added if there are spells, do
+        // we actually need to remove it again?
+        if ($container.length === 0 && spellset.length !== 0)
+        {
+            root.prepend("<div class='fg4'>Buggy spellset!</div>");
+            return;
+        }
         $container.attr("id", "").addClass("menu_contents spellset");
         if (spellset.length === 0)
         {
@@ -155,7 +162,7 @@ function ($, comm, client, ui, enums, cr, util, scroller, main, gui, player) {
                 var text = feat.body;
                 if (feat.quote)
                      text += "\n\n" + feat.quote;
-                $feat.find(".body").html(text);
+                $feat.find(".body").html(util.formatted_string_to_html(text));
             }
             else
                 $feat.find(".body").remove();
@@ -170,9 +177,17 @@ function ($, comm, client, ui, enums, cr, util, scroller, main, gui, player) {
                 feat.tile.ymax, false, describe_scale);
             $popup.append($feat);
         });
+        if (desc.actions)
+        {
+            $popup.append("<div class=actions></div>");
+            $popup.find(".actions").html(clickify_actions(desc.actions));
+        }
+
         var s = scroller($popup[0]);
         $popup.on("keydown keypress", function (event) {
-            scroller_handle_key(s, event);
+            var key = String.fromCharCode(event.which);
+            if (key != "<" && key != ">") // XX not always
+                scroller_handle_key(s, event);
         });
         return $popup;
     }
@@ -233,7 +248,7 @@ function ($, comm, client, ui, enums, cr, util, scroller, main, gui, player) {
         $popup.on("keydown keypress", function (event) {
             scroller_handle_key(s, event);
         });
-        if (desc.actions !== "")
+        if (desc.actions)
             $popup.find(".actions").html(clickify_actions(desc.actions));
         else
             $popup.find(".actions").remove();
@@ -536,13 +551,14 @@ function ($, comm, client, ui, enums, cr, util, scroller, main, gui, player) {
         else if (desc.fg_idx > 0 && desc.fg_idx <= main.MAIN_MAX)
         {
             renderer.draw_foreground(0, 0, { t: {
-                fg: { value: desc.fg_idx }, bg: 0,
+                fg: { value: desc.fg_idx }, bg: 0, icons: [],
             }}, describe_scale);
         }
 
         renderer.draw_foreground(0, 0, { t: {
             fg: enums.prepare_fg_flags(desc.flag),
             bg: 0,
+            icons: desc.icons,
         }}, describe_scale);
 
         for (var i = 0; i < $panes.length; i++)
@@ -676,10 +692,14 @@ function ($, comm, client, ui, enums, cr, util, scroller, main, gui, player) {
 
     function scroller_scroll_page(scroller, dir)
     {
-        // var line_height = scroller_line_height(scroller);
+        var line_height = scroller_line_height(scroller);
         var contents = $(scroller.scrollElement);
-        var page_shift = contents[0].getBoundingClientRect().height;
-        // page_shift = Math.floor(page_shift / line_height) * line_height;
+        // XX this is a bit weird, maybe context[0] is the wrong thing to use?
+        // The -24 is to compensate for the top/bottom shades. In practice, the
+        // top line ends up a bit in the shade in long docs, possibly it should
+        // be adjusted for.
+        var page_shift = contents[0].getBoundingClientRect().height - 24;
+        page_shift = Math.floor(page_shift / line_height) * line_height;
         contents[0].scrollTop += page_shift * dir;
         update_server_scroll();
     }
@@ -859,9 +879,14 @@ function ($, comm, client, ui, enums, cr, util, scroller, main, gui, player) {
                     $button.append($canvas);
                 }
                 $.each(button.labels || [button.label], function (i, label) {
+                    // TODO: this has somewhat weird behavior if multiple spans
+                    // are produced from the formatted string...should they
+                    // really have a flex-grow property?
                     var $lbl = $(util.formatted_string_to_html(label)).css("flex-grow", "1");
                     $button.append($lbl);
                 });
+                // at least remove empty spans because of the above issue:
+                $button.find("span:empty").remove();
                 $button.attr("style", "grid-row:"+(button.y+1)+"; grid-column:"+(button.x+1)+";");
                 $descriptions.append("<span class='pane'> " + button.description + "</span>");
                 $button.attr("data-description-index", $descriptions.children().length - 1);

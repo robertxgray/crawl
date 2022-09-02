@@ -111,9 +111,9 @@ static const vector<spell_type> spellbook_templates[] =
 },
 
 {   // Book of Misfortune
-    SPELL_SLOW,
     SPELL_CONFUSING_TOUCH,
     SPELL_VIOLENT_UNRAVELLING,
+    SPELL_ENFEEBLE,
 },
 
 {   // Book of Changes
@@ -140,9 +140,9 @@ static const vector<spell_type> spellbook_templates[] =
 },
 
 {   // Book of Necromancy
-    SPELL_PAIN,
-    SPELL_ANIMATE_SKELETON,
+    SPELL_NECROTISE,
     SPELL_VAMPIRIC_DRAINING,
+    SPELL_AGONY,
 },
 
 {   // Book of Callings
@@ -152,8 +152,8 @@ static const vector<spell_type> spellbook_templates[] =
 },
 
 {   // Book of Maledictions
-    SPELL_HIBERNATION,
-    SPELL_TUKIMAS_DANCE,
+    SPELL_ANGUISH,
+    SPELL_ENFEEBLE,
 },
 
 {   // Book of Air
@@ -223,7 +223,7 @@ static const vector<spell_type> spellbook_templates[] =
 },
 
 {   // Book of Cantrips
-    SPELL_ANIMATE_SKELETON,
+    SPELL_NECROTISE,
     SPELL_SUMMON_SMALL_MAMMAL,
     SPELL_APPORTATION,
 },
@@ -255,12 +255,14 @@ static const vector<spell_type> spellbook_templates[] =
 
 {   // Book of Burglary
     SPELL_PASSWALL,
+    SPELL_HIBERNATION,
     SPELL_SWIFTNESS,
 },
 
 {   // Book of Dreams
     SPELL_HIBERNATION,
     SPELL_SPIDER_FORM,
+    SPELL_ANGUISH,
 },
 
 {   // Book of Alchemy
@@ -324,11 +326,12 @@ static const vector<spell_type> spellbook_templates[] =
     SPELL_LEHUDIBS_CRYSTAL_SPEAR,
 },
 
+#if TAG_MAJOR_VERSION == 34
 { // Book of Pain
-    SPELL_PAIN,
+    SPELL_NECROTISE,
     SPELL_AGONY,
-    SPELL_EXCRUCIATING_WOUNDS,
 },
+#endif
 
 { // Book of Decay
     SPELL_CORPSE_ROT,
@@ -408,8 +411,8 @@ static const vector<spell_type> spellbook_templates[] =
 },
 
 { // Book of Weapons
+    SPELL_TUKIMAS_DANCE,
     SPELL_PORTAL_PROJECTILE,
-    SPELL_EXCRUCIATING_WOUNDS,
     SPELL_BLADE_HANDS,
 },
 

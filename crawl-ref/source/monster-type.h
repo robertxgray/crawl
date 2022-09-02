@@ -187,6 +187,13 @@ enum monster_type                      // env.mons[].type
     MONS_DIVINE_TOME,
     MONS_FROSTBOUND_TOME,
     MONS_STRANGE_MACHINE,
+    MONS_PHARAOH_ANT,
+    MONS_STEELBARB_WORM,
+    MONS_JOROGUMO,
+    MONS_BROODMOTHER,
+    MONS_CULICIVORA,
+    MONS_SUN_MOTH,
+    MONS_RADROACH,
 #endif
     MONS_HARPY,
 #if TAG_MAJOR_VERSION == 34
@@ -360,6 +367,7 @@ enum monster_type                      // env.mons[].type
     MONS_ANIMATED_TREE,
     MONS_DEMONIC_PLANT,
     MONS_WITHERED_PLANT,
+    MONS_STARFLOWER,
 #endif
     MONS_BALLISTOMYCETE_SPORE,
     MONS_BALLISTOMYCETE,
@@ -370,7 +378,7 @@ enum monster_type                      // env.mons[].type
     MONS_GOBLIN,
     MONS_HOBGOBLIN,
     MONS_GNOLL,
-    MONS_GNOLL_SHAMAN,
+    MONS_GNOLL_BOUDA,
     MONS_GNOLL_SERGEANT,
     MONS_BOGGART,
     MONS_KOBOLD,
@@ -522,6 +530,7 @@ enum monster_type                      // env.mons[].type
     MONS_RAGGED_HIEROPHANT,
     MONS_HALAZID_WARLOCK,
     MONS_SPECTATOR,
+    MONS_METEORAN,
 #endif
     MONS_KILLER_KLOWN,
     MONS_SHAPESHIFTER,
@@ -883,6 +892,13 @@ enum monster_type                      // env.mons[].type
     MONS_MAGGIE,
     MONS_MLIOGLOTL,
     MONS_HEADMASTER,
+    MONS_PARGHIT,
+    MONS_JOSEPHINA,
+    MONS_AMAEMON,
+    MONS_LODUL,
+    MONS_VV,
+    MONS_ZENATA,
+    MONS_GRUNN,
 #endif
     // Sprint uniques:
     MONS_CHUCK,
@@ -1145,6 +1161,22 @@ enum monster_type                      // env.mons[].type
     MONS_STRANGE_MACHINE,
     MONS_SPECTATOR,
     MONS_BOUND_SOUL,
+    MONS_PHARAOH_ANT,
+    MONS_STEELBARB_WORM,
+    MONS_JOROGUMO,
+    MONS_BROODMOTHER,
+    MONS_CULICIVORA,
+    MONS_SUN_MOTH,
+    MONS_RADROACH,
+    MONS_PARGHIT,
+    MONS_JOSEPHINA,
+    MONS_AMAEMON,
+    MONS_LODUL,
+    MONS_VV,
+    MONS_ZENATA,
+    MONS_METEORAN,
+    MONS_GRUNN,
+    MONS_STARFLOWER,
 #endif
 
     NUM_MONSTERS,               // used for polymorph

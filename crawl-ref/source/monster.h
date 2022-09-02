@@ -17,7 +17,6 @@
 
 using std::vector;
 
-const int KRAKEN_TENTACLE_RANGE = 3;
 #define TIDE_CALL_TURN "tide-call-turn"
 
 #define MAX_DAMAGE_COUNTER 10000
@@ -35,6 +34,8 @@ const int KRAKEN_TENTACLE_RANGE = 3;
 
 /// has a given hound already used up its howl?
 #define DOOM_HOUND_HOWLED_KEY "doom_hound_howled"
+#define KIKU_WRETCH_KEY "kiku_wretch"
+#define ANIMATE_DEAD_KEY "animate_dead"
 
 #define DROPPER_MID_KEY "dropper_mid"
 
@@ -151,6 +152,8 @@ public:
         override;
     bool is_perm_summoned() const override;
     bool has_action_energy() const;
+    bool may_have_action_energy() const;
+    bool outpaced_by_player() const;
     void drain_action_energy();
     void check_redraw(const coord_def &oldpos, bool clear_tiles = true) const;
     void apply_location_effects(const coord_def &oldpos,
@@ -205,7 +208,7 @@ public:
     bool lose_ench_duration(const mon_enchant &e, int levels);
     bool lose_ench_levels(const mon_enchant &e, int lev, bool infinite = false);
     void lose_energy(energy_use_type et, int div = 1, int mult = 1);
-    int energy_cost(energy_use_type et, int div = 1, int mult = 1);
+    int energy_cost(energy_use_type et, int div = 1, int mult = 1) const;
 
     void scale_hp(int num, int den);
     bool gain_exp(int exp, int max_levels_to_gain = 2);
@@ -386,7 +389,7 @@ public:
     int res_elec() const override;
     int res_poison(bool temp = true) const override;
     bool res_miasma(bool /*temp*/ = true) const override;
-    int res_water_drowning() const override;
+    bool res_water_drowning() const override;
     bool res_sticky_flame() const override;
     int res_holy_energy() const override;
     int res_negative_energy(bool intrinsic_only = false) const override;
@@ -423,7 +426,7 @@ public:
     bool confused_by_you() const;
     bool caught() const override;
     bool asleep() const override;
-    bool backlit(bool self_halo = true) const override;
+    bool backlit(bool self_halo = true, bool /*temp*/ = true) const override;
     bool umbra() const override;
     int halo_radius() const override;
     int silence_radius() const override;
@@ -440,7 +443,6 @@ public:
     bool friendly() const;
     bool neutral() const;
     bool good_neutral() const;
-    bool strict_neutral() const;
     bool wont_attack() const override;
     bool pacified() const;
 
@@ -449,11 +451,11 @@ public:
     mon_spell_slot_flags spell_slot_flags(spell_type spell) const;
     bool has_unclean_spell() const;
     bool has_chaotic_spell() const;
+    bool immune_to_silence() const;
 
     bool has_attack_flavour(int flavour) const;
     bool has_damage_type(int dam_type);
-    int constriction_damage(bool direct) const override;
-    bool constriction_does_damage(bool direct) const override;
+    int constriction_damage(constrict_type typ) const override;
 
     bool can_throw_large_rocks() const override;
     bool can_speak();
@@ -516,8 +518,6 @@ public:
     int     unadjusted_body_armour_penalty() const override { return 0; }
     int     adjusted_body_armour_penalty(int) const override { return 0; }
     int     adjusted_shield_penalty(int) const override { return 0; }
-    int     armour_tohit_penalty(bool, int) const override { return 0; }
-    int     shield_tohit_penalty(bool, int) const override { return 0; }
 
     bool is_player() const override { return false; }
     monster* as_monster() override { return this; }
@@ -537,7 +537,6 @@ public:
     bool has_spell_of_type(spschool discipline) const;
 
     void bind_melee_flags();
-    void bind_spell_flags();
     void calc_speed();
     bool attempt_escape(int attempts = 1);
     void struggle_against_net();

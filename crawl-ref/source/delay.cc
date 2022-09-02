@@ -63,11 +63,11 @@
 #include "stringutil.h"
 #include "teleport.h"
 #include "terrain.h"
-#include "timed-effects.h"
 #include "transform.h"
 #include "traps.h"
 #include "travel.h"
 #include "xom.h"
+#include "zot.h" // ZOT_CLOCK_PER_FLOOR
 
 int interrupt_block::interrupts_blocked = 0;
 
@@ -118,7 +118,7 @@ static void _clear_pending_delays(size_t after_index = 1)
     }
 }
 
-bool MemoriseDelay::try_interrupt()
+bool MemoriseDelay::try_interrupt(bool /*force*/)
 {
     // Losing work here is okay... having to start from
     // scratch is a reasonable behaviour. -- bwr
@@ -126,7 +126,7 @@ bool MemoriseDelay::try_interrupt()
     return true;
 }
 
-bool MultidropDelay::try_interrupt()
+bool MultidropDelay::try_interrupt(bool /*force*/)
 {
     // No work lost
     if (!items.empty())
@@ -134,7 +134,7 @@ bool MultidropDelay::try_interrupt()
     return true;
 }
 
-bool BaseRunDelay::try_interrupt()
+bool BaseRunDelay::try_interrupt(bool /*force*/)
 {
     // Keep things consistent, otherwise disturbing phenomena can occur.
     if (you.running)
@@ -145,7 +145,7 @@ bool BaseRunDelay::try_interrupt()
     return true;
 }
 
-bool MacroDelay::try_interrupt()
+bool MacroDelay::try_interrupt(bool /*force*/)
 {
     // Always interruptible.
     return true;
@@ -153,95 +153,134 @@ bool MacroDelay::try_interrupt()
     // to the Lua function, it can't do damage.
 }
 
-bool EquipOnDelay::try_interrupt()
+bool EquipOnDelay::try_interrupt(bool force)
 {
-    if (duration > 1 && !was_prompted)
+    bool interrupt = false;
+
+    if (force)
+        interrupt = true;
+    else if (duration > 1 && !was_prompted)
     {
         if (!crawl_state.disables[DIS_CONFIRMATIONS]
             && !yesno("Keep equipping yourself?", false, 0, false))
         {
-            mprf("You stop putting on your %s.", _eq_category(equip).c_str());
-            return true;
+            interrupt = true;
         }
         else
             was_prompted = true;
     }
+
+    if (interrupt)
+    {
+        mprf("You stop putting on your %s.", _eq_category(equip).c_str());
+        return true;
+    }
     return false;
 }
 
-bool EquipOffDelay::try_interrupt()
+bool EquipOffDelay::try_interrupt(bool force)
 {
-    if (duration > 1 && !was_prompted)
+    bool interrupt = false;
+
+    if (force)
+        interrupt = true;
+    else if (duration > 1 && !was_prompted)
     {
         if (!crawl_state.disables[DIS_CONFIRMATIONS]
             && !yesno("Keep disrobing?", false, 0, false))
         {
-            mprf("You stop removing your %s.", _eq_category(equip).c_str());
-            return true;
+            interrupt = true;
         }
         else
             was_prompted = true;
     }
+
+    if (interrupt)
+    {
+        mprf("You stop removing your %s.", _eq_category(equip).c_str());
+        return true;
+    }
     return false;
 }
 
-bool AscendingStairsDelay::try_interrupt()
+bool AscendingStairsDelay::try_interrupt(bool /*force*/)
 {
     mpr("You stop ascending the stairs.");
     return true;  // short... and probably what people want
 }
 
-bool DescendingStairsDelay::try_interrupt()
+bool DescendingStairsDelay::try_interrupt(bool /*force*/)
 {
     mpr("You stop descending the stairs.");
     return true;  // short... and probably what people want
 }
 
-bool PasswallDelay::try_interrupt()
+bool PasswallDelay::try_interrupt(bool /*force*/)
 {
+    // finish() can trigger interrupts, avoid a double message
+    if (interrupt_block::blocked())
+        return false;
     mpr("Your meditation is interrupted.");
     return true;
 }
 
-bool ShaftSelfDelay::try_interrupt()
+bool ShaftSelfDelay::try_interrupt(bool /*force*/)
 {
     mpr("You stop digging.");
     return true;
 }
 
-bool ExsanguinateDelay::try_interrupt()
+bool ExsanguinateDelay::try_interrupt(bool force)
 {
-    if (duration > 1 && !was_prompted)
+    bool interrupt = false;
+
+    if (force)
+        interrupt = true;
+    else if (duration > 1 && !was_prompted)
     {
         if (!crawl_state.disables[DIS_CONFIRMATIONS]
             && !yesno("Keep bloodletting?", false, 0, false))
         {
-            mpr("You stop emptying yourself of blood.");
-            return true;
+            interrupt = true;
         }
         else
             was_prompted = true;
     }
+
+    if (interrupt)
+    {
+        mpr("You stop emptying yourself of blood.");
+        return true;
+    }
     return false;
 }
 
-bool RevivifyDelay::try_interrupt()
+bool RevivifyDelay::try_interrupt(bool force)
 {
-    if (duration > 1 && !was_prompted)
+    bool interrupt = false;
+
+    if (force)
+        interrupt = true;
+    else if (duration > 1 && !was_prompted)
     {
         if (!crawl_state.disables[DIS_CONFIRMATIONS]
             && !yesno("Continue your ritual?", false, 0, false))
         {
-            mpr("You stop revivifying.");
-            return true;
+            interrupt = true;
         }
         else
             was_prompted = true;
     }
+
+    if (interrupt)
+    {
+        mpr("You stop revivifying.");
+        return true;
+    }
     return false;
 }
 
-void stop_delay(bool stop_stair_travel)
+void stop_delay(bool stop_relocations, bool force)
 {
     if (you.delay_queue.empty())
         return;
@@ -262,8 +301,8 @@ void stop_delay(bool stop_stair_travel)
     // list of delays before clearing it.
     _clear_pending_delays();
 
-    if ((!delay->is_stair_travel() || stop_stair_travel)
-        && delay->try_interrupt())
+    if ((!delay->is_relocation() || stop_relocations)
+        && delay->try_interrupt(force))
     {
         _pop_delay();
     }
@@ -365,7 +404,7 @@ void EquipOffDelay::start()
 
 void MemoriseDelay::start()
 {
-    if (vehumet_is_offering(spell))
+    if (vehumet_is_offering(spell, true))
     {
         string message = make_stringf(" grants you knowledge of %s.",
             spell_title(spell));
@@ -625,6 +664,11 @@ void JewelleryOnDelay::finish()
     puton_ring(jewellery, false, false, true);
 }
 
+bool EquipOnDelay::invalidated()
+{
+    return !equip.defined();
+}
+
 void EquipOnDelay::finish()
 {
     const unsigned int old_talents = your_talents(false).size();
@@ -676,6 +720,9 @@ void MemoriseDelay::finish()
 
 void PasswallDelay::finish()
 {
+    // No interrupt message if our destination causes this delay to be
+    // interrupted
+    const interrupt_block block_double_message;
     mpr("You finish merging with the rock.");
     // included in default force_more_message
 
@@ -707,11 +754,8 @@ void PasswallDelay::finish()
     // Move any monsters out of the way.
     if (monster* m = monster_at(dest))
     {
-        // One square, a few squares, anywhere...
-        if (!m->shift() && !monster_blink(m, true))
-            monster_teleport(m, true, true);
-        // Might still fail.
-        if (monster_at(dest))
+        // One square only, this isn't a tloc spell!
+        if (!m->shift())
         {
             mpr("...and sense your way blocked. You quickly turn back.");
             redraw_screen();
@@ -736,6 +780,14 @@ void PasswallDelay::finish()
     // refactored in this way.
     you.update_beholders();
     you.update_fearmongers();
+
+    // in addition to missing player_reacts we miss world_reacts until after
+    // we act, missing out on a trap.
+    if (you.trapped)
+    {
+        do_trap_effects();
+        you.trapped = false;
+    }
 }
 
 void ShaftSelfDelay::finish()
@@ -1004,7 +1056,11 @@ static inline bool _monster_warning(activity_interrupt ai,
         // seen_monster
         view_monster_equipment(mon);
 
-        string text = getMiscString(mon->name(DESC_DBNAME) + " title");
+        string text;
+        if (mon->has_base_name())
+            text = getMiscString(mon->mname + " title");
+        else
+            text = getMiscString(mon->name(DESC_DBNAME) + " title");
         if (text.empty())
             text = mon->full_name(DESC_A);
         if (mon->type == MONS_PLAYER_GHOST)
@@ -1108,11 +1164,8 @@ static inline bool _monster_warning(activity_interrupt ai,
                 }
             }
         }
-        if (you.has_mutation(MUT_SCREAM)
-            && x_chance_in_y(you.get_mutation_level(MUT_SCREAM) * 6, 100))
-        {
+        if (should_shout_at_mons(*mon))
             yell(mon);
-        }
         mons_set_just_seen(mon);
     }
 

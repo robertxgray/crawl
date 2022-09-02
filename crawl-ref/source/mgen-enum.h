@@ -26,6 +26,7 @@ enum band_type
     BAND_CENTAURS,
     BAND_CENTAUR_WARRIORS,
     BAND_YAKTAURS,
+    BAND_OGRES,
     BAND_OGRE_MAGE,
     BAND_OGRE_MAGE_EXTERN,
     BAND_DEATH_YAKS,
@@ -117,6 +118,9 @@ enum band_type
     BAND_SIMULACRA,
     BAND_SPECTRALS,
     BAND_BONE_DRAGONS,
+    BAND_MIXED_SPIDERS,
+    BAND_ORANGE_DEMONS,
+    BAND_DOOM_HOUNDS,
     NUM_BANDS                   // always last
 };
 

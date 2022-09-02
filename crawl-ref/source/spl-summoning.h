@@ -7,16 +7,10 @@
 #include "item-prop-enum.h"
 #include "spl-cast.h"
 
-//Bitfield for animate dead messages
-#define DEAD_ARE_WALKING 1
-#define DEAD_ARE_SWIMMING 2
-#define DEAD_ARE_FLYING 4
-#define DEAD_ARE_SLITHERING 8
-#define DEAD_ARE_HOPPING 16
-#define DEAD_ARE_CRAWLING 32
-
 // How many aut until the next doom hound pops out of doom howl?
 #define NEXT_DOOM_HOUND_KEY "next_doom_hound"
+
+#define DRAGON_CALL_POWER_KEY "dragon_call_power"
 
 spret cast_summon_small_mammal(int pow, god_type god, bool fail);
 
@@ -67,26 +61,8 @@ void doom_howl(int time);
 
 spell_type player_servitor_spell();
 bool spell_servitorable(spell_type spell);
-void init_servitor(monster* servitor, actor* caster);
+void init_servitor(monster* servitor, actor* caster, int pow);
 spret cast_spellforged_servitor(int pow, god_type god, bool fail);
-
-vector<coord_def> simple_find_corpses();
-int animate_remains(const coord_def &a, corpse_type class_allowed,
-                    beh_type beha, int pow, unsigned short hitting,
-                    actor *as = nullptr, string nas = "",
-                    god_type god = GOD_NO_GOD, bool actual = true,
-                    bool quiet = false, bool apply_lovelessness = true,
-                    monster** mon = nullptr, int* motions = nullptr);
-
-vector<coord_def> find_animatable_skeletons(coord_def c);
-spret cast_animate_skeleton(int pow, god_type god, bool fail);
-spret cast_animate_dead(int pow, god_type god, bool fail);
-int animate_dead(actor *caster, int pow, beh_type beha,
-                 unsigned short hitting, actor *as = nullptr, string nas = "",
-                 god_type god = GOD_NO_GOD, bool actual = true);
-
-int find_simulacrable_corpse(coord_def c);
-spret cast_simulacrum(int pow, god_type god, bool fail);
 
 monster_type pick_random_wraith();
 spret cast_haunt(int pow, const coord_def& where, god_type god, bool fail);
@@ -122,5 +98,12 @@ spret fedhas_grow_ballistomycete(const coord_def& target, bool fail);
 spret fedhas_overgrow(bool fail);
 spret fedhas_grow_oklob(const coord_def& target, bool fail);
 
+void kiku_unearth_wretches();
+
 spret cast_foxfire(actor &agent, int pow, god_type god, bool fail);
 spret foxfire_swarm();
+bool summon_spider(const actor &agent, coord_def pos, god_type god,
+                        spell_type spell, int pow);
+spret summon_spiders(actor &agent, int pow, god_type god, bool fail = false);
+
+spret summon_butterflies();

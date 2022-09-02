@@ -202,11 +202,6 @@ static const map<spschool, miscast_datum> miscast_effects = {
             },
             [] (actor& target, actor* source, miscast_source_info /*mc_info*/,
                 int dam, string /*cause*/) {
-                if (target.is_player())
-                    debuff_player();
-                else
-                    debuff_monster(*target.as_monster());
-
                 target.slow_down(source, dam);
             }
         },
@@ -260,7 +255,9 @@ static const map<spschool, miscast_datum> miscast_effects = {
                             break;
                         case ATT_GOOD_NEUTRAL:
                         case ATT_NEUTRAL:
-                        case ATT_STRICT_NEUTRAL:
+#if TAG_MAJOR_VERSION == 34
+                    case ATT_OLD_STRICT_NEUTRAL:
+#endif
                             data.behaviour = BEH_NEUTRAL;
                         break;
                     }

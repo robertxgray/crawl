@@ -10,6 +10,7 @@
 #include <cmath>
 
 #include "areas.h"
+#include "art-enum.h"
 #include "coordit.h" // radius_iterator
 #include "env.h"
 #include "god-passive.h"
@@ -18,8 +19,10 @@
 #include "libutil.h"
 #include "message.h"
 #include "output.h"
+#include "player.h"
 #include "prompt.h"
 #include "religion.h"
+#include "spl-other.h"
 #include "spl-util.h"
 #include "stringutil.h"
 #include "terrain.h"
@@ -36,7 +39,7 @@ spret cast_deaths_door(int pow, bool fail)
     you.set_duration(DUR_DEATHS_DOOR, 10 + random2avg(13, 3)
                                        + (random2(pow) / 10));
 
-    const int hp = max(calc_spell_power(SPELL_DEATHS_DOOR, true) / 10, 1);
+    const int hp = max(pow / 10, 1);
     you.attribute[ATTR_DEATHS_DOOR_HP] = hp;
     set_hp(hp);
 
@@ -241,5 +244,17 @@ spret cast_transform(int pow, transformation which_trans, bool fail)
 
     fail_check();
     transform(pow, which_trans);
+    return spret::success;
+}
+
+spret cast_corpse_rot(int pow, bool fail)
+{
+    fail_check();
+    mpr("You radiate decay.");
+
+    you.increase_duration(DUR_CORPSE_ROT,
+                            10 + random2(1 + div_rand_round(pow * 3, 5)), 50);
+    you.props[CORPSE_ROT_POWER_KEY] = pow;
+
     return spret::success;
 }

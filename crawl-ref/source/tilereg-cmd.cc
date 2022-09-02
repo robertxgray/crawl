@@ -179,6 +179,7 @@ bool tile_command_not_applicable(const command_type cmd, bool safe)
     switch (cmd)
     {
     case CMD_REST:
+        return !safe || !can_rest_here();
     case CMD_EXPLORE:
     case CMD_INTERLEVEL_TRAVEL:
     case CMD_MEMORISE_SPELL:
@@ -188,7 +189,7 @@ bool tile_command_not_applicable(const command_type cmd, bool safe)
     case CMD_USE_ABILITY:
         return your_talents(false).empty();
     case CMD_CAST_SPELL:
-        return !can_cast_spells(true);
+        return !you.spell_no || !can_cast_spells(true);
     default:
         return false;
     }

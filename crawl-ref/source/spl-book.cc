@@ -95,7 +95,10 @@ static const map<wand_type, spell_type> _wand_spells =
     { WAND_POLYMORPH, SPELL_POLYMORPH },
     { WAND_CHARMING, SPELL_CHARMING },
     { WAND_ACID, SPELL_CORROSIVE_BOLT },
+    { WAND_LIGHT, SPELL_BOLT_OF_LIGHT },
+    { WAND_QUICKSILVER, SPELL_QUICKSILVER_BOLT },
     { WAND_MINDBURST, SPELL_MINDBURST },
+    { WAND_ROOTS, SPELL_FASTROOT },
 };
 
 
@@ -390,7 +393,7 @@ static spell_list _get_spell_list(bool just_check = false,
     return mem_spells;
 }
 
-bool library_add_spells(vector<spell_type> spells)
+bool library_add_spells(vector<spell_type> spells, bool quiet)
 {
     vector<spell_type> new_spells;
     for (spell_type st : spells)
@@ -405,7 +408,7 @@ bool library_add_spells(vector<spell_type> spells)
                 you.hidden_spells.set(st, true);
         }
     }
-    if (!new_spells.empty())
+    if (!new_spells.empty() && !quiet)
     {
         vector<string> spellnames(new_spells.size());
         transform(new_spells.begin(), new_spells.end(), spellnames.begin(), spell_title);
@@ -413,9 +416,8 @@ bool library_add_spells(vector<spell_type> spells)
              spellnames.size() > 1 ? "s" : "",
              comma_separated_line(spellnames.begin(),
                                   spellnames.end()).c_str());
-        return true;
     }
-    return false;
+    return !new_spells.empty();
 }
 
 #ifdef USE_TILE_LOCAL
@@ -436,8 +438,8 @@ static bool _sort_mem_spells(const sortable_spell &a, const sortable_spell &b)
         return mem_a;
 
     // List the Vehumet gifts at the very top.
-    const bool offering_a = vehumet_is_offering(a.spell);
-    const bool offering_b = vehumet_is_offering(b.spell);
+    const bool offering_a = vehumet_is_offering(a.spell, true);
+    const bool offering_b = vehumet_is_offering(b.spell, true);
     if (offering_a != offering_b)
         return offering_a;
 
@@ -506,7 +508,7 @@ protected:
                         : current_action == action::describe ? "(Describe)"
                         : current_action == action::hide ? "(Hide)    "
                         : "(Show)    ",
-                        you.divine_exegesis ? "" : "Failure  "));
+                        you.divine_exegesis ? "         " : "Failure  "));
     }
 
 private:
@@ -515,40 +517,52 @@ private:
     string search_text;
     int hidden_count;
 
-    void update_more()
+    // void update_more()
+    string get_keyhelp(bool) const override
     {
-        // TODO: convert this all to widgets
+        // TODO: convert this all to widgets, or just printf formatting, or
+        // *something* less convoluted and special cased
         ostringstream desc;
 
         // line 1
-        desc << spell_levels_str << "    ";
-        if (search_text.size())
+        if (you.divine_exegesis)
         {
-            // TODO: couldn't figure out how to do this in pure c++
-            const string match_text = make_stringf("Matches: '<w>%.20s</w>'",
-                            replace_all(search_text, "<", "<<").c_str());
-            int escaped_count = (int) std::count(search_text.begin(),
-                                                    search_text.end(), '<');
-            // the width here is a bit complicated because it needs to ignore
-            // any color codes and escaped '<'s.
-            desc << std::left << std::setw(43 + escaped_count) << match_text;
+            desc << make_stringf(
+                "<lightgreen>Casting with Divine Exegesis: %d MP available</lightgreen>",
+                you.magic_points);
         }
         else
-            desc << std::setw(36) << "";
-        if (hidden_count)
+            desc << spell_levels_str;
+
+        // divine exegesis doesn't have space
+        if (hidden_count && (!you.divine_exegesis || !search_text.size()))
         {
-            desc << std::right << std::setw(hidden_count == 1 ? 3 : 2)
+            desc << std::right << std::setw(5)
                  << hidden_count
-                 << (hidden_count > 1 ? " spells" : " spell")
-                 << " hidden";
+                 << (hidden_count > 1 ? " spells hidden" : " spell hidden ")
+                 << "   ";
         }
+        else
+            desc << "   ";
+
+        if (search_text.size())
+        {
+            int max_size = you.divine_exegesis ? 22 : 47;
+            if (!you.divine_exegesis && hidden_count)
+                max_size -= 19;
+            const bool search_overflow =
+                            static_cast<int>(search_text.size()) > max_size;
+            desc << make_stringf("Matches: <w>%.*s%s</w>",
+                            search_overflow ? max_size - 2 : max_size,
+                            replace_all(search_text, "<", "<<").c_str(),
+                            search_overflow ? ".." : "");
+        }
+
         desc << "\n";
 
         const string act = you.divine_exegesis ? "Cast" : "Memorise";
         // line 2
-        desc << "[<yellow>?</yellow>] help                "
-                "[<yellow>Ctrl-f</yellow>] search      "
-                "[<yellow>!</yellow>] ";
+        desc << menu_keyhelp_cmd(CMD_MENU_CYCLE_MODE) << " ";
         desc << ( current_action == action::cast
                             ? "<w>Cast</w>|Describe|Hide|Show"
                  : current_action == action::memorise
@@ -558,19 +572,21 @@ private:
                  : current_action == action::hide
                             ? act + "|Describe|<w>Hide</w>|Show"
                  : act + "|Describe|Hide|<w>Show</w>");
+        desc << "   " << menu_keyhelp_cmd(CMD_MENU_SEARCH) << " search"
+                "   [<w>?</w>] help"; // XX hardcoded for this menu
 
-        set_more(formatted_string::parse_string(desc.str()));
+        if (search_text.size())
+            return pad_more_with(desc.str(), "[<w>Esc</w>] clear"); // esc is harcoded for this case
+        else
+            return pad_more_with_esc(desc.str());
     }
 
-    virtual bool process_key(int keyin) override
+    bool cycle_mode(bool forward) override
     {
         bool entries_changed = false;
-        switch (keyin)
+        // completely replace superclass mode implementation
+        if (forward)
         {
-        case '!':
-#ifdef TOUCH_UI
-        case CK_TOUCH_DUMMY:
-#endif
             switch (current_action)
             {
                 case action::cast:
@@ -584,18 +600,65 @@ private:
                 case action::hide:
                     current_action = action::unhide;
                     entries_changed = true;
+                    if (last_hovered >= 0 && is_set(MF_ARROWS_SELECT))
+                        last_hovered = 0;
                     break;
                 case action::unhide:
                     current_action = you.divine_exegesis ? action::cast
                                                           : action::memorise;
                     entries_changed = true;
+                    if (last_hovered >= 0 && is_set(MF_ARROWS_SELECT))
+                        last_hovered = 0;
                     break;
             }
-            update_title();
-            update_more();
-            break;
+        }
+        else
+        {
+            switch (current_action)
+            {
+                case action::cast:
+                case action::memorise:
+                    current_action = action::unhide;
+                    entries_changed = true;
+                    if (last_hovered >= 0 && is_set(MF_ARROWS_SELECT))
+                        last_hovered = 0;
+                    break;
+                case action::describe:
+                    current_action = you.divine_exegesis ? action::cast
+                                                         : action::memorise;
+                    entries_changed = true; // may need to remove hotkeys
+                    break;
+                case action::hide:
+                    current_action = action::describe;
+                    break;
+                case action::unhide:
+                    current_action = action::hide;
+                    entries_changed = true;
+                    if (last_hovered >= 0 && is_set(MF_ARROWS_SELECT))
+                        last_hovered = 0;
+                    break;
+            }
+        }
+        update_title();
+        if (entries_changed)
+            update_entries();
+        update_more();
+        return true;
+    }
 
-        case CONTROL('F'):
+    command_type get_command(int keyin) override
+    {
+        if (keyin == '?')
+            return CMD_MENU_HELP;
+        return Menu::get_command(keyin);
+    }
+
+    virtual bool process_command(command_type cmd) override
+    {
+        bool entries_changed = false;
+        switch (cmd)
+        {
+        case CMD_MENU_SEARCH:
         {
             char linebuf[80] = "";
             const bool validline = title_prompt(linebuf, sizeof linebuf,
@@ -608,22 +671,21 @@ private:
             entries_changed = old_search != search_text;
             break;
         }
-
-        case '?':
+        case CMD_MENU_HELP:
             show_spell_library_help();
             break;
-        case CK_MOUSE_B2:
-        case CK_MOUSE_CMD:
-        CASE_ESCAPE
+        case CMD_MENU_EXIT:
+            // if we are in a search, exit the search, not the menu
+            // TODO: can this be generalized to the superclass?
             if (search_text.size())
             {
                 search_text = "";
                 entries_changed = true;
                 break;
             }
-            // intentional fallthrough if search is empty
+            // otherwise, fallthrough to default handling
         default:
-            return Menu::process_key(keyin);
+            return Menu::process_command(cmd);
         }
 
         if (entries_changed)
@@ -636,7 +698,7 @@ private:
 
     colour_t entry_colour(const sortable_spell& entry)
     {
-        if (vehumet_is_offering(entry.spell))
+        if (vehumet_is_offering(entry.spell, true))
             return LIGHTBLUE;
         else
         {
@@ -649,6 +711,14 @@ private:
     // ones; otherwise, show only non-hidden ones.
     void update_entries()
     {
+        // try to keep the hover on the current spell. (Maybe this is too
+        // complicated?)
+        ASSERT(last_hovered < static_cast<int>(items.size()));
+        int new_hover = last_hovered;
+        const spell_type hovered_spell =
+            last_hovered >= 0 && items[last_hovered]->data
+                ? *static_cast<spell_type *>(items[last_hovered]->data)
+                : SPELL_NO_SPELL;
         clear();
         hidden_count = 0;
         const bool show_hidden = current_action == action::unhide;
@@ -696,10 +766,12 @@ private:
                 desc << string(60 - so_far, ' ');
             desc << "</" << colour_to_str(colour) << ">";
 
-            if (!you.divine_exegesis)
+            if (you.divine_exegesis)
+                desc << string(9, ' ');
+            else
             {
                 desc << "<" << colour_to_str(spell.fail_rate_colour) << ">";
-                desc << chop_string(failure_rate_to_string(spell.raw_fail), 12);
+                desc << chop_string(failure_rate_to_string(spell.raw_fail), 9);
                 desc << "</" << colour_to_str(spell.fail_rate_colour) << ">";
             }
 
@@ -717,16 +789,21 @@ private:
 
             me->data = &(spell.spell);
             add_entry(me);
+            if (hovered_spell == spell.spell)
+                new_hover = items.size() - 1;
+
         }
+        reset();
+        set_hovered(new_hover);
         update_menu(true);
     }
 
 public:
     SpellLibraryMenu(spell_list& list)
-        : Menu(MF_SINGLESELECT | MF_ANYPRINTABLE
-               | MF_ALWAYS_SHOW_MORE | MF_ALLOW_FORMATTING
-               // To have the ctrl-f menu show up in webtiles
-               | MF_ALLOW_FILTER, "spell"),
+        : Menu(MF_SINGLESELECT | MF_ALLOW_FORMATTING
+                | MF_ARROWS_SELECT | MF_INIT_HOVER | MF_SHOW_EMPTY
+                // To have the ctrl-f menu show up in webtiles
+                | MF_ALLOW_FILTER, "spell"),
         current_action(you.divine_exegesis ? action::cast : action::memorise),
         spells(list),
         hidden_count(0)
@@ -750,7 +827,6 @@ public:
             if (player_spell_levels() < 9)
                 spell_levels_str += " ";
         }
-        set_more(formatted_string::parse_string(spell_levels_str + "\n"));
 
 #ifdef USE_TILE_LOCAL
         FontWrapper *font = tiles.get_crt_font();
@@ -761,6 +837,15 @@ public:
 
         update_entries();
         update_more();
+
+        on_examine = [](const MenuEntry& item)
+        {
+            const spell_type spell = *static_cast<spell_type*>(item.data);
+            ASSERT(is_valid_spell(spell));
+            describe_spell(spell, nullptr);
+            return true;
+        };
+
         on_single_selection = [this](const MenuEntry& item)
         {
             const spell_type spell = *static_cast<spell_type*>(item.data);
@@ -772,8 +857,12 @@ public:
             case action::cast:
                 return false;
             case action::describe:
-                describe_spell(spell, nullptr);
-                break;
+                // n.b. skip superclass handling of ACT_EXAMINE, since we
+                // do not use `menu_action` in this class
+                // hacky: call this by hotkey in order to trigger some side
+                // effects...
+                if (item.hotkeys.size())
+                    return examine_by_key(item.hotkeys[0]);
             case action::hide:
             case action::unhide:
                 you.hidden_spells.set(spell, !you.hidden_spells.get(spell));

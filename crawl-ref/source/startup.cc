@@ -62,6 +62,7 @@
  #include "windowmanager.h"
 #endif
 #include "ui.h"
+#include "version.h"
 
 using namespace ui;
 
@@ -277,13 +278,18 @@ static void _post_init(bool newc)
     calc_hp();
     calc_mp();
     shopping_list.refresh();
+    populate_sets_by_obj_type();
 
     run_map_local_preludes();
 
     if (newc)
     {
-        if (Options.pregen_dungeon && crawl_state.game_standard_levelgen())
+        // n.b. temple already generated in setup_game at this point
+        if (Options.pregen_dungeon == level_gen_type::full
+            && crawl_state.game_standard_levelgen())
+        {
             pregen_dungeon(level_id(NUM_BRANCHES, -1));
+        }
 
         you.entering_level = false;
         you.transit_stair = DNGN_UNSEEN;
@@ -298,6 +304,11 @@ static void _post_init(bool newc)
     // XXX: Any invalid level_id should do.
     level_id old_level;
     old_level.branch = NUM_BRANCHES;
+
+#ifdef USE_TILE_WEB
+    if (tiles.get_ui_state() == UI_CRT)
+        tiles.set_ui_state(UI_NORMAL);
+#endif
 
     load_level(you.entering_level ? you.transit_stair :
                you.char_class == JOB_DELVER ? DNGN_STONE_STAIRS_UP_I : DNGN_STONE_STAIRS_DOWN_I,
@@ -366,6 +377,8 @@ static void _post_init(bool newc)
     update_vision_range();
     init_exclusion_los();
     ash_check_bondage();
+    if (you.prev_save_version != Version::Long)
+        check_if_everything_is_identified();
 
     trackers_init_new_level();
 

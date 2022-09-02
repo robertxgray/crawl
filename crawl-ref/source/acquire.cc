@@ -197,11 +197,11 @@ static armour_type _acquirement_armour_for_slot(equipment_type slot_type,
  *
  * Weighted by Shields skill & the secret racial shield bonus.
  *
- * Ratios by shields skill & player size (B = buckler, K = kite shield, P = tower shield)
+ * Ratios by shields skill & player size (B = buckler, K = kite shield, T = tower shield)
  *
  *     Shields    0           5         10          15        20
- * Large:   {6B}/5K/4P  ~{1B}/1K/1P  ~{1B}/5K/7P  ~2K/3P     1K/2P
- * Med.:        2B/1K    6B/4K/1P      2B/2K/1P   4B/8K/3P   1K/1P
+ * Large:   {6B}/5K/4T  ~{1B}/1K/1T  ~{1B}/5K/7T  ~2K/3T     1K/2T
+ * Med.:        2B/1K    6B/4K/1T      2B/2K/1T   4B/8K/3T   1K/1T
  * Small:      ~3B/1K     ~5B/2K      ~2B/1K     ~3B/2K     ~1B/1K
  *
  * XXX: possibly shield skill should count for more for non-med races?
@@ -212,11 +212,11 @@ static armour_type _acquirement_shield_type()
 {
     const int scale = 256;
     vector<pair<armour_type, int>> weights = {
-        { ARM_BUCKLER,       player_shield_racial_factor() * 4 * scale
+        { ARM_BUCKLER,       (5 + player_shield_racial_factor()) * 4 * scale
                                 - _skill_rdiv(SK_SHIELDS, scale) },
         { ARM_KITE_SHIELD,        10 * scale },
         { ARM_TOWER_SHIELD,  20 * scale
-                             - player_shield_racial_factor() * 4 * scale
+                             - (5 + player_shield_racial_factor()) * 4 * scale
                              + _skill_rdiv(SK_SHIELDS, scale / 2) },
     };
 
@@ -507,47 +507,19 @@ static int _acquirement_weapon_subtype(bool divine, int & /*quantity*/, int agen
 static int _acquirement_missile_subtype(bool /*divine*/, int & /*quantity*/,
                                         int /*agent*/)
 {
-    int count = 0;
-    int skill = SK_THROWING;
+    // Choose from among all usable missile types.
+    vector<pair<missile_type, int> > missile_weights;
 
-    for (int i = SK_SLINGS; i <= SK_THROWING; i++)
-    {
-        const int sk = _skill_rdiv((skill_type)i);
-        count += sk;
-        if (x_chance_in_y(sk, count))
-            skill = i;
-    }
+    missile_weights.emplace_back(MI_BOOMERANG, 50);
+    missile_weights.emplace_back(MI_DART, 75);
 
-    missile_type result = MI_BOOMERANG;
+    if (you.body_size() >= SIZE_MEDIUM)
+        missile_weights.emplace_back(MI_JAVELIN, 100);
 
-    switch (skill)
-    {
-    case SK_SLINGS:    result = MI_SLING_BULLET; break;
-    case SK_BOWS:      result = MI_ARROW; break;
-    case SK_CROSSBOWS: result = MI_BOLT; break;
+    if (you.can_throw_large_rocks())
+        missile_weights.emplace_back(MI_LARGE_ROCK, 100);
 
-    case SK_THROWING:
-        {
-            // Choose from among all usable missile types.
-            vector<pair<missile_type, int> > missile_weights;
-
-            missile_weights.emplace_back(MI_BOOMERANG, 50);
-            missile_weights.emplace_back(MI_DART, 75);
-
-            if (you.body_size() >= SIZE_MEDIUM)
-                missile_weights.emplace_back(MI_JAVELIN, 100);
-
-            if (you.can_throw_large_rocks())
-                missile_weights.emplace_back(MI_LARGE_ROCK, 100);
-
-            result = *random_choose_weighted(missile_weights);
-        }
-        break;
-
-    default:
-        break;
-    }
-    return result;
+    return *random_choose_weighted(missile_weights);
 }
 
 static int _acquirement_jewellery_subtype(bool /*divine*/, int & /*quantity*/,
@@ -668,11 +640,15 @@ static int _acquirement_misc_subtype(bool /*divine*/, int & /*quantity*/,
 static int _acquirement_wand_subtype(bool /*divine*/, int & /*quantity*/,
                                      int /*agent */)
 {
+    const auto hex_wand_type = (wand_type)item_for_set(ITEM_SET_HEX_WANDS);
+    const auto beam_wand_type = (wand_type)item_for_set(ITEM_SET_BEAM_WANDS);
+    const auto blast_wand_type = (wand_type)item_for_set(ITEM_SET_BLAST_WANDS);
+    const int hex_wand_weight = hex_wand_type == WAND_CHARMING
+                                && you.allies_forbidden() ? 0 : 20;
     vector<pair<wand_type, int>> weights = {
-        { WAND_ACID,      20 },
-        { WAND_ICEBLAST,  20 },
-        { WAND_CHARMING,  you.allies_forbidden() ? 0 : 10 },
-        { WAND_PARALYSIS, 10 },
+        { beam_wand_type, 20 },
+        { blast_wand_type, 20 },
+        { hex_wand_type,  hex_wand_weight },
         { WAND_MINDBURST, 8 },
         { WAND_POLYMORPH, 5 },
         { WAND_DIGGING,   5 },
@@ -1077,30 +1053,6 @@ static bool _is_armour_plain(const item_def &item)
     return get_armour_ego_type(item) == SPARM_NORMAL;
 }
 
-/**
- * Has the player already encountered an item with this brand?
- *
- * Only supports weapons & armour.
- *
- * @param item      The item in question.
- * @param           Whether the player has encountered another weapon or
- *                  piece of armour with the same ego.
- */
-static bool _brand_already_seen(const item_def &item)
-{
-    switch (item.base_type)
-    {
-        case OBJ_WEAPONS:
-            return you.seen_weapon[item.sub_type]
-                   & (1<<get_weapon_brand(item));
-        case OBJ_ARMOUR:
-            return you.seen_armour[item.sub_type]
-                   & (1<<get_armour_ego_type(item));
-        default:
-            die("Unsupported item type!");
-    }
-}
-
 // ugh
 #define ITEM_LEVEL (divine ? ISPEC_GIFT : ISPEC_GOOD_ITEM)
 
@@ -1147,11 +1099,6 @@ static void _adjust_brand(item_def &item, bool divine, int agent)
             reroll_brand(item, ITEM_LEVEL);
         }
     }
-
-    // Try to not generate brands that were already seen, although unlike
-    // jewellery and books, this is not absolute.
-    while (_brand_already_seen(item) && !one_chance_in(5))
-        reroll_brand(item, ITEM_LEVEL);
 }
 
 /**
@@ -1239,10 +1186,7 @@ int acquirement_create_item(object_class_type class_wanted,
         // matching a currently unfilled equipment slot.
         if (acq_item.base_type == OBJ_ARMOUR && !is_artefact(acq_item))
         {
-            const special_armour_type sparm = get_armour_ego_type(acq_item);
-
             if (agent != GOD_XOM
-                && you.seen_armour[acq_item.sub_type] & (1 << sparm)
                 && x_chance_in_y(MAX_ACQ_TRIES - item_tries, MAX_ACQ_TRIES + 5)
                 || !divine
                 && you.seen_armour[acq_item.sub_type]
@@ -1301,8 +1245,15 @@ int acquirement_create_item(object_class_type class_wanted,
             acq_item.plus = max(static_cast<int>(acq_item.plus), 3 + random2(3));
         else if (class_wanted == OBJ_GOLD)
             acq_item.quantity = random_range(200, 1400, 2);
-        else if (class_wanted == OBJ_MISSILES && !divine)
-            acq_item.quantity *= 5;
+        else if (class_wanted == OBJ_MISSILES)
+        {
+            // TODO: consider doubling the gift timeout instead of adjusting
+            // gift quantity. That'd be an Oka nerf, but maybe it's fine?
+            if (divine)
+                acq_item.quantity = max(1, acq_item.quantity / 2);
+            else
+                acq_item.quantity *= 5;
+        }
         else if (quant > 1)
             acq_item.quantity = quant;
 
@@ -1366,7 +1317,7 @@ int acquirement_create_item(object_class_type class_wanted,
         // immediately identifying evil weapons).
         // Note that Xom will happily give useless items!
         int oldflags = acq_item.flags;
-        acq_item.flags |= ISFLAG_KNOW_TYPE;
+        acq_item.flags |= ISFLAG_KNOW_TYPE | ISFLAG_KNOW_PROPERTIES;
         if ((is_useless_item(acq_item, false) && agent != GOD_XOM)
             || god_hates_item(acq_item))
         {
@@ -1427,32 +1378,27 @@ class AcquireMenu : public InvMenu
     CrawlVector &acq_items;
 
     void init_entries();
-    void update_help();
-    bool acquire_selected();
-
-    virtual bool process_key(int keyin) override;
-
+    string get_keyhelp(bool unused) const override;
+    bool examine_index(int i) override;
+    bool skip_process_command(int keyin) override;
 public:
     AcquireMenu(CrawlVector &aitems);
 };
 
 class AcquireEntry : public InvEntry
 {
-    string get_text(bool need_cursor = false) const override
+    string get_text() const override
     {
-        need_cursor = need_cursor && show_cursor;
         const colour_t keycol = LIGHTCYAN;
         const string keystr = colour_to_str(keycol);
         const string itemstr =
             colour_to_str(menu_colour(text, item_prefix(*item), tag));
         const string gold_text = item->base_type == OBJ_GOLD
             ? make_stringf(" (you have %d gold)", you.gold) : "";
-        return make_stringf(" <%s>%c%c%c%c</%s><%s>%s%s</%s>",
+        return make_stringf(" <%s>%c %c </%s><%s>%s%s</%s>",
                             keystr.c_str(),
                             hotkeys[0],
-                            need_cursor ? '[' : ' ',
                             selected() ? '+' : '-',
-                            need_cursor ? ']' : ' ',
                             keystr.c_str(),
                             itemstr.c_str(),
                             text.c_str(),
@@ -1468,62 +1414,19 @@ public:
 };
 
 AcquireMenu::AcquireMenu(CrawlVector &aitems)
-    : InvMenu(MF_SINGLESELECT | MF_NO_SELECT_QTY | MF_QUIET_SELECT
-              | MF_ALWAYS_SHOW_MORE | MF_ALLOW_FORMATTING),
+    : InvMenu(MF_SINGLESELECT | MF_QUIET_SELECT
+              | MF_ALLOW_FORMATTING | MF_INIT_HOVER),
       acq_items(aitems)
 {
     menu_action = ACT_EXECUTE;
+    action_cycle = CYCLE_TOGGLE;
     set_flags(get_flags() & ~MF_USE_TWO_COLUMNS);
 
     set_tag("acquirement");
 
     init_entries();
 
-    update_help();
-
     set_title("Choose an item to acquire.");
-}
-
-void AcquireMenu::init_entries()
-{
-    menu_letter ckey = 'a';
-    for (item_def& item : acq_items)
-    {
-        auto newentry = make_unique<AcquireEntry>(item);
-        newentry->hotkeys.clear();
-        newentry->add_hotkey(ckey++);
-        add_entry(move(newentry));
-    }
-}
-
-static string _hyphenated_letters(int how_many, char first)
-{
-    string s = "<w>";
-    s += first;
-    s += "</w>";
-    if (how_many > 1)
-    {
-        s += "-<w>";
-        s += first + how_many - 1;
-        s += "</w>";
-    }
-    return s;
-}
-
-void AcquireMenu::update_help()
-{
-    string top_line = string(80, ' ') + '\n';
-
-    set_more(formatted_string::parse_string(top_line + make_stringf(
-        //[!] acquire|examine item  [a-i] select item to acquire
-        //[Esc/R-Click] exit
-        "%s  [%s] %s\n"
-        "[Esc/R-Click] exit",
-        menu_action == ACT_EXECUTE ? "[<w>!</w>] <w>acquire</w>|examine items" :
-                                     "[<w>!</w>] acquire|<w>examine</w> items",
-        _hyphenated_letters(item_count(), 'a').c_str(),
-        menu_action == ACT_EXECUTE ? "select item for acquirement"
-                                   : "examine item")));
 }
 
 static void _create_acquirement_item(item_def &item)
@@ -1558,85 +1461,89 @@ static void _create_acquirement_item(item_def &item)
     you.props.erase(ACQUIRE_ITEMS_KEY);
 }
 
-bool AcquireMenu::acquire_selected()
+void AcquireMenu::init_entries()
 {
-    vector<MenuEntry*> selected = selected_entries();
-    ASSERT(selected.size() == 1);
-    auto& entry = *selected[0];
+    menu_letter ckey = 'a';
+    for (item_def& item : acq_items)
+    {
+        auto newentry = make_unique<AcquireEntry>(item);
+        newentry->hotkeys.clear();
+        newentry->add_hotkey(ckey++);
+        add_entry(move(newentry));
+    }
 
-    const string col = colour_to_str(channel_to_colour(MSGCH_PROMPT));
-    update_help();
-    const formatted_string old_more = more;
-    more = formatted_string::parse_string(make_stringf(
+    on_single_selection = [this](const MenuEntry& item)
+    {
+        // update the more with a y/n prompt
+        update_more();
+
+        if (!yesno(nullptr, true, 'n', false, false, true))
+        {
+            deselect_all();
+            update_more(); // go back to the regular more
+            return true;
+        }
+
+        item_def &acq_item = *static_cast<item_def*>(item.data);
+        _create_acquirement_item(acq_item);
+
+        return false;
+    };
+}
+
+string AcquireMenu::get_keyhelp(bool) const
+{
+    string help;
+    vector<MenuEntry*> selected = selected_entries();
+    if (selected.size() == 1 && menu_action == ACT_EXECUTE)
+    {
+        auto& entry = *selected[0];
+        const string col = colour_to_str(channel_to_colour(MSGCH_PROMPT));
+        help = make_stringf(
                "<%s>Acquire %s? (%s/N)</%s>\n",
                col.c_str(),
                entry.text.c_str(),
                Options.easy_confirm == easy_confirm_type::none ? "Y" : "y",
-               col.c_str()));
-    more += old_more;
-    update_more();
-
-    if (!yesno(nullptr, true, 'n', false, false, true))
-    {
-        deselect_all();
-        more = old_more;
-        update_more();
-        return true;
+               col.c_str());
     }
+    else
+        help = "\n";
+    // looks better with a margin:
+    help += string(MIN_COLS, ' ') + '\n';
 
-    item_def &acq_item = *static_cast<item_def*>(entry.data);
-    _create_acquirement_item(acq_item);
-
-    return false;
+    help += make_stringf(
+        //[!] acquire|examine item  [a-i] select item to acquire
+        //[Esc/R-Click] exit
+        "<lightgrey>%s%s  %s %s</lightgrey>",
+        menu_keyhelp_cmd(CMD_MENU_CYCLE_MODE).c_str(),
+        menu_action == ACT_EXECUTE ? " <w>acquire</w>|examine items" :
+                                     " acquire|<w>examine</w> items",
+        hyphenated_hotkey_letters(item_count(), 'a').c_str(),
+        menu_action == ACT_EXECUTE ? "select item for acquirement"
+                                   : "examine item");
+    return pad_more_with_esc(help);
 }
 
-bool AcquireMenu::process_key(int keyin)
+bool AcquireMenu::examine_index(int i)
 {
-    switch (keyin)
-    {
-    case '!':
-    case '?':
-        if (menu_action == ACT_EXECUTE)
-            menu_action = ACT_EXAMINE;
-        else
-            menu_action = ACT_EXECUTE;
-        update_help();
-        update_more();
-        return true;
-    default:
-        break;
-    }
+    ASSERT(i >= 0 && i < static_cast<int>(items.size()));
+    // Use a copy to set flags that make the description better
+    // See the similar code in shopping.cc for details about const
+    // hygene
+    item_def &item = *static_cast<item_def*>(items[i]->data);
 
-    if (keyin - 'a' >= 0 && keyin - 'a' < (int)items.size())
-    {
-        if (menu_action == ACT_EXAMINE)
-        {
-            // Use a copy to set flags that make the description better
-            // See the similar code in shopping.cc for details about const
-            // hygene
-            item_def& item(*const_cast<item_def*>(dynamic_cast<AcquireEntry*>(
-                items[letter_to_index(keyin)])->item));
+    item.flags |= (ISFLAG_IDENT_MASK | ISFLAG_NOTED_ID
+                   | ISFLAG_NOTED_GET);
+    describe_item_popup(item);
+    deselect_all();
 
-            item.flags |= (ISFLAG_IDENT_MASK | ISFLAG_NOTED_ID
-                           | ISFLAG_NOTED_GET);
-            describe_item_popup(item);
+    return true;
+}
 
-            return true;
-        }
-        else
-        {
-            const unsigned int i = keyin - 'a';
-            select_item_index(i, 1, false);
-            return acquire_selected();
-        }
-    }
-
-    const bool ret = InvMenu::process_key(keyin);
-    auto selected = selected_entries();
-    if (selected.size() == 1)
-        return acquire_selected();
-    else
-        return ret;
+bool AcquireMenu::skip_process_command(int keyin)
+{
+    // Bypass InvMenu::skip_process_command, which disables ! and ?
+    return Menu::skip_process_command(keyin);
 }
 
 static item_def _acquirement_item_def(object_class_type item_type)

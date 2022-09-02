@@ -31,7 +31,7 @@ class dist;
 #define RU_SACRIFICE_PROGRESS_KEY "ru_progress_to_next_sacrifice"
 #define RU_SACRIFICE_DELAY_KEY "ru_sacrifice_delay"
 #define RU_SACRIFICE_PENALTY_KEY "ru_sacrifice_penalty"
-#define RU_SAC_XP_LEVELS 2
+#define RU_SAC_XP_LEVELS 1
 
 #define OKAWARU_DUEL_TARGET_KEY "okawaru_duel_target"
 #define OKAWARU_DUEL_CURRENT_KEY "okawaru_duel_current"
@@ -46,7 +46,7 @@ const char * const GOZAG_SHOP_SUFFIX_KEY     = "gozag_shop_suffix_%d";
 const char * const GOZAG_SHOP_COST_KEY       = "gozag_shop_cost_%d";
 
 #define GOZAG_GOLD_AURA_KEY "gozag_gold_aura_amount"
-#define GOZAG_GOLD_AURA_MAX 20
+#define GOZAG_GOLD_AURA_MAX 10
 #define GOZAG_POTION_PETITION_AMOUNT 400
 #define GOZAG_SHOP_BASE_MULTIPLIER 100
 #define GOZAG_SHOP_MOD_MULTIPLIER 25
@@ -117,8 +117,6 @@ bool beogh_resurrect();
 bool yred_can_bind_soul(monster* mon);
 void yred_make_bound_soul(monster* mon, bool force_hostile = false);
 
-bool kiku_receive_corpses(int pow);
-bool kiku_take_corpse(bool just_check = false);
 bool kiku_gift_capstone_spells();
 
 bool fedhas_passthrough_class(const monster_type mc);

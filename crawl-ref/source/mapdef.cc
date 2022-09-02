@@ -1436,6 +1436,9 @@ map_corner_t map_lines::merge_subvault(const coord_def &mtl,
             (*overlay)(x, y).keyspec_idx = idx;
         }
 
+    dprf(DIAG_DNGN, "Merged subvault '%s' at %d,%d x %d,%d",
+        vmap.name.c_str(), vtl.x, vtl.y, vbr.x, vbr.y);
+
     return map_corner_t(vtl, vbr);
 }
 
@@ -3739,13 +3742,6 @@ void mons_list::parse_mons_spells(mons_spec &spec, vector<string> &spells)
             else
             {
                 const vector<string> slot_vals = split_string(".", spname);
-                if (slot_vals.size() < 2)
-                {
-                    error = make_stringf(
-                        "Invalid spell slot format: '%s' in '%s'",
-                        spname.c_str(), slotspec.c_str());
-                    return;
-                }
                 const spell_type sp(spell_by_name(slot_vals[0]));
                 if (sp == SPELL_NO_SPELL)
                 {
@@ -3761,14 +3757,18 @@ void mons_list::parse_mons_spells(mons_spec &spec, vector<string> &spells)
                     return;
                 }
                 cur_spells[i].spell = sp;
-                const int freq = atoi(slot_vals[1].c_str());
-                if (freq <= 0)
+                int freq = 30;
+                if (slot_vals.size() >= 2)
                 {
-                    error = make_stringf("Need a positive spell frequency;"
-                                         "got '%s' in '%s'",
-                                         slot_vals[1].c_str(),
-                                         spname.c_str());
-                    return;
+                    freq = atoi(slot_vals[1].c_str());
+                    if (freq <= 0)
+                    {
+                        error = make_stringf("Need a positive spell frequency;"
+                                             "got '%s' in '%s'",
+                                             slot_vals[1].c_str(),
+                                             spname.c_str());
+                        return;
+                    }
                 }
                 cur_spells[i].freq = freq;
                 for (size_t j = 2; j < slot_vals.size(); j++)
@@ -3797,12 +3797,7 @@ void mons_list::parse_mons_spells(mons_spec &spec, vector<string> &spells)
                         cur_spells[i].flags |= MON_SPELL_LONG_RANGE;
                 }
                 if (!(cur_spells[i].flags & MON_SPELL_TYPE_MASK))
-                {
-                    error = make_stringf(
-                        "Spell slot '%s' missing a casting type",
-                        spname.c_str());
-                    return;
-                }
+                    cur_spells[i].flags |= MON_SPELL_MAGICAL;
             }
         }
 
@@ -3849,8 +3844,6 @@ mon_enchant mons_list::parse_ench(string &ench_str, bool perm)
 mons_list::mons_spec_slot mons_list::parse_mons_spec(string spec)
 {
     mons_spec_slot slot;
-
-    slot.fix_slot = strip_tag(spec, "fix_slot");
 
     vector<string> specs = split_string("/", spec);
 
@@ -3922,10 +3915,8 @@ mons_list::mons_spec_slot mons_list::parse_mons_spec(string spec)
             mspec.attitude = ATT_HOSTILE;
         else if (att == "friendly")
             mspec.attitude = ATT_FRIENDLY;
-        else if (att == "good_neutral")
+        else if (att == "good_neutral" || att == "fellow_slime")
             mspec.attitude = ATT_GOOD_NEUTRAL;
-        else if (att == "fellow_slime" || att == "strict_neutral")
-            mspec.attitude = ATT_STRICT_NEUTRAL;
         else if (att == "neutral")
             mspec.attitude = ATT_NEUTRAL;
 
@@ -4875,27 +4866,9 @@ string item_list::add_item(const string &spec, bool fix)
             pick_item(sp);
         }
 
-        items.push_back(sp);
-    }
-
-    return error;
-}
-
-string item_list::set_item(int index, const string &spec)
-{
-    error.clear();
-    if (index < 0)
-        return error = make_stringf("Index %d out of range", index);
-
-    item_spec_slot sp = parse_item_spec(spec);
-    if (error.empty())
-    {
-        if (index >= (int) items.size())
-        {
-            items.reserve(index + 1);
-            items.resize(index + 1, item_spec_slot());
-        }
-        items.push_back(sp);
+        // If the only item here was an excluded item, we'll get an empty list.
+        if (!sp.ilist.empty())
+            items.push_back(sp);
     }
 
     return error;
@@ -4954,6 +4927,11 @@ int str_to_ego(object_class_type item_type, string ego_str)
         "shadows",
         "rampaging",
         "infusion",
+        "light",
+        "wrath",
+        "mayhem",
+        "guile",
+        "energy",
         nullptr
     };
     COMPILE_CHECK(ARRAYSZ(armour_egos) == NUM_REAL_SPECIAL_ARMOURS);
@@ -5282,6 +5260,8 @@ bool item_list::parse_single_spec(item_spec& result, string s)
         result.props[USEFUL_KEY] = bool(true);
     if (strip_tag(s, "unobtainable"))
         result.props[UNOBTAINABLE_KEY] = true;
+    if (strip_tag(s, "no_exclude"))
+        result.props[NO_EXCLUDE_KEY] = true;
 
     const int mimic = strip_number_tag(s, "mimic:");
     if (mimic != TAG_UNFOUND)
@@ -5295,6 +5275,10 @@ bool item_list::parse_single_spec(item_spec& result, string s)
     const short charges = strip_number_tag(s, "charges:");
     if (charges >= 0)
         result.props[CHARGES_KEY].get_int() = charges;
+
+    const string custom_name = strip_tag_prefix(s, "itemname:");
+    if (!custom_name.empty())
+        result.props[ITEM_NAME_KEY] = custom_name;
 
     const int plus = strip_number_tag(s, "plus:");
     if (plus != TAG_UNFOUND)
@@ -5614,6 +5598,24 @@ void item_list::parse_random_by_class(string c, item_spec &spec)
         spec.sub_type = NUM_JEWELLERY;
         return;
     }
+    if (c == "beam wand")
+    {
+        spec.base_type = OBJ_WANDS;
+        spec.sub_type = item_for_set(ITEM_SET_BEAM_WANDS);
+        return;
+    }
+    if (c == "blast wand")
+    {
+        spec.base_type = OBJ_WANDS;
+        spec.sub_type = item_for_set(ITEM_SET_BLAST_WANDS);
+        return;
+    }
+    if (c == "concealment scroll")
+    {
+        spec.base_type = OBJ_SCROLLS;
+        spec.sub_type = item_for_set(ITEM_SET_CONCEAL_SCROLLS);
+        return;
+    }
 
     error = make_stringf("Bad item class: '%s'", c.c_str());
 }
@@ -5646,15 +5648,19 @@ item_list::item_spec_slot item_list::parse_item_spec(string spec)
 
     item_spec_slot list;
 
-    list.fix_slot = strip_tag(spec, "fix_slot");
-
     for (const string &specifier : split_string("/", spec))
     {
-        item_spec result;
-        if (parse_single_spec(result, specifier))
-            list.ilist.push_back(result);
-        else
+        item_spec parsed_spec;
+        if (!parse_single_spec(parsed_spec, specifier))
+        {
             dprf(DIAG_DNGN, "Failed to parse: %s", specifier.c_str());
+            continue;
+        }
+        if (parsed_spec.props.exists(NO_EXCLUDE_KEY)
+            || !item_excluded_from_set(parsed_spec.base_type, parsed_spec.sub_type))
+        {
+            list.ilist.push_back(parsed_spec);
+        }
     }
 
     return list;

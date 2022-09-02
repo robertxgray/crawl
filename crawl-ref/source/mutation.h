@@ -10,6 +10,7 @@
 
 #include "equipment-type.h"
 #include "mutation-type.h"
+#include "externs.h"
 
 using std::vector;
 
@@ -42,7 +43,6 @@ bool is_bad_mutation(mutation_type mut);
 bool is_good_mutation(mutation_type mut);
 bool is_body_facet(mutation_type mut);
 bool is_slime_mutation(mutation_type mut);
-bool undead_mutation_rot();
 
 bool mutate(mutation_type which_mutation, const string &reason,
             bool failMsg = true,
@@ -63,8 +63,7 @@ void validate_mutations(bool debug_msg=false);
 
 bool delete_mutation(mutation_type which_mutation, const string &reason,
                      bool failMsg = true,
-                     bool force_mutation = false, bool god_gift = false,
-                     bool disallow_mismatch = false);
+                     bool force_mutation = false, bool god_gift = false);
 
 bool delete_all_mutations(const string &reason);
 
@@ -91,7 +90,11 @@ bool physiology_mutation_conflict(mutation_type mutat);
 int augmentation_amount();
 void reset_powered_by_death_duration();
 
+string mut_blocks_item_reason(const item_def &item, bool temp);
+
 bool delete_all_temp_mutations(const string &reason);
 bool delete_temp_mutation();
+
+tileidx_t get_mutation_tile(mutation_type mut);
 
 void set_evolution_mut_xp(bool malignant);

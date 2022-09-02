@@ -3,11 +3,14 @@
 #include "status.h"
 
 #include "areas.h"
+#include "art-enum.h" // bearserk
+#include "artefact.h"
 #include "branch.h"
 #include "cloud.h"
 #include "duration-type.h"
 #include "env.h"
 #include "evoke.h"
+#include "fight.h" // weapon_cleaves
 #include "god-abil.h"
 #include "god-passive.h"
 #include "item-prop.h"
@@ -22,13 +25,12 @@
 #include "spl-damage.h" // COUPLING_TIME_KEY
 #include "spl-summoning.h" // NEXT_DOOM_HOUND_KEY in duration-data
 #include "spl-transloc.h" // for you_teleport_now() in duration-data
-#include "spl-wpnench.h" // for _end_weapon_brand() in duration-data
 #include "stairs.h" // rise_through_ceiling
 #include "stringutil.h"
 #include "throw.h"
-#include "timed-effects.h" // bezotting_level
 #include "transform.h"
 #include "traps.h"
+#include "zot.h" // bezotting_level
 
 #include "duration-data.h"
 
@@ -205,18 +207,19 @@ bool fill_status_info(int status, status_info& inf)
                           (-1 * you.props[FLAY_DAMAGE_KEY].get_int()));
         break;
 
+    case DUR_BERSERK:
+        if (player_equip_unrand(UNRAND_BEAR_SPIRIT))
+            inf.light_text = "Bearserk";
+        break;
+
     case STATUS_NO_POTIONS:
-        // Don't double the light if under a duration
-        if (!player_in_branch(BRANCH_COCYTUS) || you.duration[DUR_NO_POTIONS])
-            break;
-        // use -Potion as a base
-        _fill_inf_from_ddef(DUR_NO_POTIONS, inf);
-        inf.short_text = "frozen potions";
-        inf.long_text  = "Your potions are frozen solid.";
-        // intentional fallthrough
-    case DUR_NO_POTIONS:
-        if (!you.can_drink(false))
-            inf.light_colour = DARKGREY;
+        if (you.duration[DUR_NO_POTIONS] || player_in_branch(BRANCH_COCYTUS))
+        {
+            inf.light_colour = !you.can_drink(false) ? DARKGREY : RED;
+            inf.light_text   = "-Potion";
+            inf.short_text   = "unable to drink";
+            inf.long_text    = "You cannot drink potions.";
+        }
         break;
 
     case DUR_SWIFTNESS:
@@ -413,7 +416,7 @@ bool fill_status_info(int status, status_info& inf)
             ASSERT(cstr);
 
             const bool damage =
-                cstr->constriction_does_damage(you.is_directly_constricted());
+                cstr->constriction_does_damage(you.get_constrict_type());
 
             inf.light_colour = YELLOW;
             inf.light_text   = damage ? "Constr"      : "Held";
@@ -462,7 +465,7 @@ bool fill_status_info(int status, status_info& inf)
         {
             inf.light_colour = WHITE;
             inf.light_text
-                = make_stringf("Storm (%d)",
+                = make_stringf("Heavenly (%d)",
                                you.props[WU_JIAN_HEAVENLY_STORM_KEY].get_int());
         }
         break;
@@ -657,10 +660,8 @@ bool fill_status_info(int status, status_info& inf)
     case DUR_CLEAVE:
     {
         const item_def* weapon = you.weapon();
-
-        if (weapon && item_attack_skill(*weapon) == SK_AXES)
+        if (weapon && weapon_cleaves(*weapon))
             inf.light_colour = DARKGREY;
-
         break;
     }
 
@@ -765,29 +766,35 @@ bool fill_status_info(int status, status_info& inf)
 static void _describe_zot(status_info& inf)
 {
     const int lvl = bezotting_level();
+    const bool in_death_range = zot_clock_fatal();
     if (lvl > 0)
     {
-        inf.short_text = "bezotted";
+        inf.short_text = in_death_range ? "bezotted and risking death" : "bezotted";
         inf.long_text = "Zot is approaching!";
     }
-    else if (!Options.always_show_zot || !zot_clock_active())
+    else if (!Options.always_show_zot && !you.has_mutation(MUT_SHORT_LIFESPAN)
+             || !zot_clock_active())
+    {
         return;
+    }
 
-    inf.light_text = make_stringf("Zot (%d)", turns_until_zot());
+    // XX code dup with overview screen
+    inf.light_text = make_stringf("Zot (%d%s)", turns_until_zot(),
+        in_death_range ? ", death" : "");
     switch (lvl)
     {
         case 0:
-            inf.light_colour = WHITE;
+            inf.light_colour = in_death_range ? RED : WHITE;
             break;
         case 1:
-            inf.light_colour = YELLOW;
+            inf.light_colour = in_death_range ? RED : YELLOW;
             break;
         case 2:
             inf.light_colour = RED;
             break;
         case 3:
         default:
-            inf.light_colour = MAGENTA;
+            inf.light_colour = LIGHTMAGENTA;
             break;
     }
 }
@@ -1037,26 +1044,27 @@ const char *duration_end_message(duration_type dur)
 }
 
 /**
- * What message should a given duration print when it reaches 50%, if any?
+ * What message should a given duration print when it passes its
+ * expiring threshold, if any?
  *
  * @param dur   The duration in question (e.g. DUR_PETRIFICATION).
- * @return      A message to print for the duration when it hits 50%.
+ * @return      A message to print.
  */
-const char *duration_mid_message(duration_type dur)
+const char *duration_expire_message(duration_type dur)
 {
-    return _lookup_duration(dur)->decr.mid_msg.msg;
+    return _lookup_duration(dur)->decr.expire_msg.msg;
 }
 
 /**
- * How much should the duration be decreased by when it hits the midpoint (to
- * fuzz the remaining time), if at all?
+ * How much should the duration be decreased by when it passes its
+ * expiring threshold (to fuzz the remaining time), if at all?
  *
  * @param dur   The duration in question (e.g. DUR_PETRIFICATION).
  * @return      A random value to reduce the remaining duration by; may be 0.
  */
-int duration_mid_offset(duration_type dur)
+int duration_expire_offset(duration_type dur)
 {
-    return _lookup_duration(dur)->decr.mid_msg.offset();
+    return _lookup_duration(dur)->decr.expire_msg.offset();
 }
 
 /**
@@ -1078,7 +1086,7 @@ int duration_expire_point(duration_type dur)
  * @param dur   The duration in question (e.g. DUR_PETRIFICATION).
  * @return      The appropriate message channel, e.g. MSGCH_RECOVERY.
  */
-msg_channel_type duration_mid_chan(duration_type dur)
+msg_channel_type duration_expire_chan(duration_type dur)
 {
     return _lookup_duration(dur)->decr.recovery ? MSGCH_RECOVERY
                                                 : MSGCH_DURATION;

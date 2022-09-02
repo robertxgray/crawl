@@ -95,8 +95,8 @@ Dig ability
 
 Allows making tunnels through soft rock and rusted grates. Activating the
 ability has no cost and simply prepares you to start digging; once active,
-moving into a wall will start tunnelling. Doing so makes some noise and is a
-little slower than walking.
+moving into a wall will start tunnelling. Doing so makes some noise and drains
+the user's maximum health.
 
 Once active, activating the ability again or making any non-digging movement
 action will cancel the Dig status.
@@ -198,16 +198,16 @@ Permanently blesses a weapon of your choice with the holy wrath of the Shining
 One. Demon weapons will be converted into a more powerful sacred weapon. This
 blessing may only be used once, and it cannot be used on artefact weapons.
 %%%%
-# Kikubaaqudgha
-Receive Corpses ability
+Unearth Wretches ability
 
-Creates one or more reanimatable monster corpses nearby. The number and
-freshness of these are dependent on Necromancy skill.
+Bring forth those near death from Kikubaaqudgha's necropolis, providing ample
+fodder for all kinds of necromancy. Their number and quality is dependent on
+Necromancy skill.
 %%%%
 Torment ability
 
-Sacrifices an adjacent cadaver to make all living creatures in sight experience
-all the pain that being suffered in its life. This damage is never directly
+Call out to the dead, making all living creatures in sight experience all the
+pain some poor soul suffered in its entire life. This damage is never directly
 lethal. Kikubaaqudgha will always at least partially shield you from the effect.
 %%%%
 Brand Weapon With Pain ability
@@ -219,7 +219,8 @@ and either gift may only be received once.
 %%%%
 Receive Forbidden Knowledge ability
 
-Grants you knowledge of the most powerful and sinister Necromancy spells.
+Grants you knowledge of the most powerful and sinister Necromancy spells:
+Haunt, Borgnjor's Revivification, Infestation, Necromutation, and Death's Door.
 You must choose between this gift or that of branding a weapon with pain, and
 either gift may only be received once.
 %%%%
@@ -242,15 +243,16 @@ Invocations skill.
 %%%%
 Bind Soul ability
 
-Marks a monster's soul as ripe for the taking. Living, holy and demonic
-monsters can be targeted (excepting most lords of Pandemonium), as long as they
-are relatively uninjured. The duration of the mark is dependent on Invocations
-skill. If the monster dies while still marked, its soul will become yours.
+Marks a monster's soul as ripe for the taking. If the monster dies before the mark
+expires, it will return as a bound soul, still retaining the equipment, spells and
+abilities it had in life.
 
-The bound soul will retain the monster's faculties, equipment and abilities,
-as well as some of its innate healing. The bound soul will follow its captor
-through stairs and come when recalled from a different level. However, only one
-soul can be enslaved at a time.
+Living, holy and demonic monsters can be targeted (excepting most lords of
+Pandemonium), as long as they are relatively uninjured. The duration of the mark
+is dependent on Invocations skill.
+
+The bound soul will follow its captor through stairs, and can be recalled from
+other levels. Only one soul can be bound at a time.
 %%%%
 # Okawaru
 Heroism ability
@@ -272,8 +274,8 @@ with no escape until you either emerge victorious or are slain.
 # Makhleb
 Minor Destruction ability
 
-Shoots a random harmful blast at the targeted creature. Damage and accuracy
-are increased by Invocations skill.
+Shoots a weak blast of fire, lightning, stone, acid, or negative energy at the
+targeted creature. Damage and accuracy are increased by Invocations skill.
 %%%%
 Lesser Servant of Makhleb ability
 
@@ -282,8 +284,8 @@ demon hostile.
 %%%%
 Major Destruction ability
 
-[[Major Destruction spell]] Damage and accuracy are increased by Invocations
-skill.
+Shoots a piercing bolt of fire, lightning, magma, acid, or negative energy at
+the targeted creature. Damage and accuracy are increased by Invocations skill.
 %%%%
 Greater Servant of Makhleb ability
 
@@ -369,11 +371,8 @@ entered it.
 Bend Space ability
 
 Bends the fabric of space, instantly translocating the user a short distance,
-and possibly also translocating and damaging creatures adjacent to the initial
-location or the destination. In warping the fabric of space, this ability
-ignores effects that would usually prevent translocations. Invocations skill
-increases the chance of affecting nearby creatures and the damage dealt to
-those affected.
+and possibly also translocating foes adjacent to the destination. This ignores
+effects that would usually prevent translocations.
 %%%%
 Banish ability
 
@@ -600,11 +599,11 @@ Sacrifices purity of body or mind, causing a single mutation.
 %%%%
 Sacrifice Words ability
 
-Sacrifices the ability to use magical scrolls while threatened.
+Sacrifices the ability to use magical scrolls after being badly injured.
 %%%%
 Sacrifice Drink ability
 
-Sacrifices the ability to drink potions while threatened.
+Sacrifices the ability to drink potions after being badly injured.
 %%%%
 Sacrifice Essence ability
 
@@ -662,8 +661,8 @@ Sacrifices a hand, causing you to lose the ability to use shields{{
 %%%%
 Sacrifice Experience ability
 
-Sacrifices some of your past experiences, causing you to lose two levels
-immediately and also to have the maximum level you can attain lowered by two.
+Sacrifices some of your past experiences, causing you to lose one level
+immediately and also to have the maximum level you can attain lowered by one.
 %%%%
 Sacrifice Skill ability
 
@@ -762,7 +761,7 @@ with both melee and conjurations. This choice is permanent and cannot be undone.
 %%%%
 Ancestor Life: Hexer ability
 
-Remembers your ancestor as a hexer, a cunning rogue capable of skilled
+Remembers your ancestor as a hexer, a cunning rogue capable of swift
 knifework and debilitating spellcasting. This choice is permanent and cannot be
 undone.
 %%%%
@@ -792,9 +791,8 @@ invisibility, and obscure the vision of those outside the storm.
 %%%%
 Fiery Armour ability
 
-Armour yourself in fire, burning up some incoming attacks and searing foes
-foolish enough to strike you in melee. This armour lasts quite a long time
-before finally burning out.
+Armour yourself in fire, providing +7 AC and searing foes foolish enough to
+strike you in melee. The fire takes quite a long time to burn out.
 %%%%
 Foxfire Swarm ability
 

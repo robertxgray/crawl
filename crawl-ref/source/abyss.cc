@@ -62,7 +62,7 @@
 
 const coord_def ABYSS_CENTRE(GXM / 2, GYM / 2);
 
-static const int ABYSSAL_RUNE_MAX_ROLL = 200;
+static const int ABYSSAL_RUNE_MAX_ROLL = 60;
 
 abyss_state abyssal_state;
 
@@ -85,7 +85,7 @@ static coord_def _place_feature_near(const coord_def &centre,
                                      int radius,
                                      dungeon_feature_type candidate,
                                      dungeon_feature_type replacement,
-                                     int tries, bool not_seen = false)
+                                     int tries)
 {
     coord_def cp = INVALID_COORD;
     for (int i = 0; i < tries; ++i)
@@ -96,9 +96,6 @@ static coord_def _place_feature_near(const coord_def &centre,
         cp = centre + offset;
 
         if (cp == centre || !in_bounds(cp))
-            continue;
-
-        if (not_seen && cell_see_cell_nocache(cp, centre))
             continue;
 
         if (env.grid(cp) == candidate)
@@ -179,7 +176,7 @@ static int _abyssal_rune_roll()
 
     const double depth = you.depth + god_favoured;
 
-    return (int) pow(100.0, depth/(1 + brdepth[BRANCH_ABYSS]));
+    return (int) pow(100.0, depth/6);
 }
 
 static void _abyss_fixup_vault(const vault_placement *vp)
@@ -241,11 +238,101 @@ static void _abyss_postvault_fixup()
     env.markers.activate_all();
 }
 
+// returns whether the abyssal rune is at `p`, updating map knowledge as a
+// side-effect
+static bool _sync_rune_knowledge(coord_def p)
+{
+    if (!in_bounds(p))
+        return false;
+    // somewhat convoluted because to update map knowledge properly, we need
+    // an actual rune item
+    const bool already = env.map_knowledge(p).item();
+    const bool rune_memory = already && env.map_knowledge(p).item()->is_type(
+                                                    OBJ_RUNES, RUNE_ABYSSAL);
+    for (stack_iterator si(p); si; ++si)
+    {
+        if (si->is_type(OBJ_RUNES, RUNE_ABYSSAL))
+        {
+            // found! make sure map memory is up-to-date
+            if (!rune_memory)
+                env.map_knowledge(p).set_item(*si, already);
+
+            if (!you.see_cell(p))
+                env.map_knowledge(p).flags |= MAP_DETECTED_ITEM;
+            return true;
+        }
+    }
+    // no rune found, clear as needed
+    if (already && (!rune_memory
+                    || !!(env.map_knowledge(p).flags & MAP_MORE_ITEMS)))
+    {
+        // something else seems to have been there, clear the rune but leave
+        // a remnant
+        env.map_knowledge(p).set_detected_item();
+    }
+    else
+        env.map_knowledge(p).clear();
+    return false;
+}
+
+void clear_abyssal_rune_knowledge()
+{
+    coord_def &cur_loc = you.props[ABYSSAL_RUNE_LOC_KEY].get_coord();
+    if (in_bounds(cur_loc) && !you.runes[RUNE_ABYSSAL])
+        mpr("Your memory of the abyssal rune fades away.");
+    cur_loc = coord_def(-1,-1);
+}
+
+static void _detect_abyssal_rune()
+{
+    // Don't print misleading messages about the rune disappearing
+    // after you already picked it up.
+    if (you.runes[RUNE_ABYSSAL])
+    {
+        clear_abyssal_rune_knowledge();
+        return;
+    }
+
+    if (!you.props.exists(ABYSSAL_RUNE_LOC_KEY))
+        you.props[ABYSSAL_RUNE_LOC_KEY].get_coord() = coord_def(-1,-1);
+    coord_def &cur_loc = you.props[ABYSSAL_RUNE_LOC_KEY].get_coord();
+    const bool existed = in_bounds(cur_loc);
+    if (existed && _sync_rune_knowledge(cur_loc))
+        return; // still exists in the same place, no need to do anything more
+
+    // now we need to check if a new or moved rune appeared
+
+    bool detected = false;
+    cur_loc = coord_def(-1,-1);
+    // check if a new one generated
+    for (rectangle_iterator ri(MAPGEN_BORDER); ri; ++ri)
+    {
+        // sets map knowledge by side effect if found
+        if (_sync_rune_knowledge(*ri))
+        {
+            detected = true;
+            cur_loc = *ri;
+            break;
+        }
+    }
+
+    if (existed)
+    {
+        mprf("The abyss shimmers again as the detected "
+            "abyssal rune vanishes from your memory%s.",
+            detected ? " and reappears" : "");
+    }
+    else if (detected)
+    {
+        mpr("The abyssal matter surrounding you shimmers strangely.");
+        mpr("You detect the abyssal rune!");
+    }
+
+    // XX could do the xom check from here?
+}
+
 static bool _abyss_place_rune_vault(const map_bitmask &abyss_genlevel_mask)
 {
-    // Make sure we're not about to link bad items.
-    debug_item_scan();
-
     bool result = false;
     int tries = 10;
     do
@@ -254,10 +341,6 @@ static bool _abyss_place_rune_vault(const map_bitmask &abyss_genlevel_mask)
     }
     while (!result && --tries);
 
-    // Make sure the rune is linked.
-    // XXX: I'm fairly sure this does nothing if result == false,
-    //      but leaving it alone for now. -- Grunt
-    _abyss_postvault_fixup();
     return result;
 }
 
@@ -298,80 +381,6 @@ static bool _abyss_place_rune(const map_bitmask &abyss_genlevel_mask)
     return false;
 }
 
-// Returns true if items can be generated on the given square.
-static bool _abyss_square_accepts_items(const map_bitmask &abyss_genlevel_mask,
-                                        coord_def p)
-{
-    return abyss_genlevel_mask(p)
-           && env.grid(p) == DNGN_FLOOR
-           && env.igrid(p) == NON_ITEM
-           && !map_masked(p, MMT_VAULT);
-}
-
-static int _abyss_create_items(const map_bitmask &abyss_genlevel_mask,
-                               bool placed_abyssal_rune)
-{
-    // During game start, number and level of items mustn't be higher than
-    // that on level 1.
-    int num_items = 150, items_level = 52;
-    int items_placed = 0;
-
-    if (player_in_starting_abyss())
-    {
-        num_items   = 3 + roll_dice(3, 11);
-        items_level = 0;
-    }
-
-    const int abyssal_rune_roll = _abyssal_rune_roll();
-    bool should_place_abyssal_rune = false;
-    vector<coord_def> chosen_item_places;
-    for (rectangle_iterator ri(MAPGEN_BORDER); ri; ++ri)
-    {
-        if (_abyss_square_accepts_items(abyss_genlevel_mask, *ri))
-        {
-            if (items_placed < num_items && one_chance_in(200))
-            {
-                // [ds] Don't place abyssal rune in this loop to avoid
-                // biasing rune placement toward the north-west of the
-                // abyss level. Instead, make a note of whether we
-                // decided to place the abyssal rune at all, and if we
-                // did, place it randomly somewhere in the map at the
-                // end of the item-gen pass. We may as a result create
-                // (num_items + 1) items instead of num_items, which
-                // is acceptable.
-                if (!placed_abyssal_rune && !should_place_abyssal_rune
-                    && abyssal_rune_roll != -1
-                    && x_chance_in_y(abyssal_rune_roll, ABYSSAL_RUNE_MAX_ROLL))
-                {
-                    should_place_abyssal_rune = true;
-                }
-
-                chosen_item_places.push_back(*ri);
-            }
-        }
-    }
-
-    if (!placed_abyssal_rune && should_place_abyssal_rune)
-    {
-        if (_abyss_place_rune(abyss_genlevel_mask))
-            ++items_placed;
-    }
-
-    for (const coord_def &place : chosen_item_places)
-    {
-        if (_abyss_square_accepts_items(abyss_genlevel_mask, place))
-        {
-            int thing_created = items(true, OBJ_RANDOM, OBJ_RANDOM,
-                                      items_level);
-            move_item_to_grid(&thing_created, place);
-            if (thing_created != NON_ITEM)
-                items_placed++;
-        }
-    }
-
-    return items_placed;
-}
-
 static string _who_banished(const string &who)
 {
     return who.empty() ? who : " (" + who + ")";
@@ -391,7 +400,8 @@ static int _banished_depth(const int power)
     // you can do about that.
     const int maxdepth = div_rand_round((power + 5), 6);
     const int mindepth = (4 * power + 7) / 23;
-    return min(5, max(1, random_range(mindepth, maxdepth)));
+    const int bottom = brdepth[BRANCH_ABYSS];
+    return min(bottom, max(1, random_range(mindepth, maxdepth)));
 }
 
 void banished(const string &who, const int power)
@@ -406,7 +416,7 @@ void banished(const string &who, const int power)
             down_stairs(DNGN_ABYSSAL_STAIR);
         else
         {
-            // On Abyss:5 we can't go deeper; cause a shift to a new area
+            // On Abyss:$ we can't go deeper; cause a shift to a new area
             mprf(MSGCH_BANISHMENT, "You are banished to a different region of the Abyss.");
             abyss_teleport();
         }
@@ -414,16 +424,17 @@ void banished(const string &who, const int power)
     }
 
     const int depth = _banished_depth(power);
-    const string what = make_stringf("Cast into level %d of the Abyss", depth)
-                      + _who_banished(who);
-    take_note(Note(NOTE_MESSAGE, 0, 0, what), true);
 
     stop_delay(true);
     run_animation(ANIMATION_BANISH, UA_BRANCH_ENTRY, false);
     push_features_to_abyss();
     floor_transition(DNGN_ENTER_ABYSS, orig_terrain(you.pos()),
                      level_id(BRANCH_ABYSS, depth), true);
-    // This is an honest abyss entry, mark milestone
+    // This is an honest abyss entry, mark milestone and take note
+    // floor_transition might change our final destination in the abyss
+    const string what = make_stringf("Cast into level %d of the Abyss",
+                                     you.depth) + _who_banished(who);
+    take_note(Note(NOTE_MESSAGE, 0, 0, what), true);
     mark_milestone("abyss.enter",
         "was cast into the Abyss!" + _who_banished(who), "parent");
 
@@ -1233,6 +1244,7 @@ static void _update_abyss_terrain(const coord_def &p,
 
     switch (currfeat)
     {
+        case DNGN_RUNELIGHT:
         case DNGN_EXIT_ABYSS:
         case DNGN_ABYSSAL_STAIR:
             return;
@@ -1320,8 +1332,9 @@ static void _abyss_apply_terrain(const map_bitmask &abyss_genlevel_mask,
                                  bool morph = false, bool now = false)
 {
     // The chance is reciprocal to these numbers.
-    const int exit_chance = you.runes[RUNE_ABYSSAL] ? 1250
-                            : 7500 - 1250 * (you.depth - 1);
+    const int depth = you.runes[RUNE_ABYSSAL] ? 5 : you.depth - 2;
+    // Cap the chance at the old max depth (5).
+    const int exit_chance = 7250 - 1250 * min(depth, 5);
 
     int exits_wanted  = 0;
     int altars_wanted = 0;
@@ -1380,7 +1393,7 @@ static void _abyss_apply_terrain(const map_bitmask &abyss_genlevel_mask,
                                 abyss_genlevel_mask)
         ||
         level_id::current().depth < brdepth[BRANCH_ABYSS]
-        && _abyss_check_place_feat(p, 1900, nullptr, nullptr,
+        && _abyss_check_place_feat(p, 1750, nullptr, nullptr,
                                    DNGN_ABYSSAL_STAIR,
                                    abyss_genlevel_mask);
     }
@@ -1391,7 +1404,7 @@ static void _abyss_apply_terrain(const map_bitmask &abyss_genlevel_mask,
         ASSERT_RANGE(env.grid(*ri), DNGN_UNSEEN + 1, NUM_FEATURES);
 }
 
-static int _abyss_place_vaults(const map_bitmask &abyss_genlevel_mask)
+static int _abyss_place_vaults(const map_bitmask &abyss_genlevel_mask, bool placed_abyssal_rune)
 {
     unwind_vault_placement_mask vaultmask(&abyss_genlevel_mask);
 
@@ -1433,6 +1446,14 @@ static int _abyss_place_vaults(const map_bitmask &abyss_genlevel_mask)
         }
     }
 
+    const int abyssal_rune_roll = _abyssal_rune_roll();
+    if (!placed_abyssal_rune && abyssal_rune_roll != -1
+        && x_chance_in_y(abyssal_rune_roll, ABYSSAL_RUNE_MAX_ROLL))
+    {
+        if (_abyss_place_rune(abyss_genlevel_mask))
+            ++vaults_placed;
+    }
+
     return vaults_placed;
 }
 
@@ -1448,15 +1469,15 @@ static void _generate_area(const map_bitmask &abyss_genlevel_mask)
 
     // Make sure we're not about to link bad items.
     debug_item_scan();
-    _abyss_place_vaults(abyss_genlevel_mask);
-
+    _abyss_place_vaults(abyss_genlevel_mask, placed_abyssal_rune);
     // Link the vault-placed items.
     _abyss_postvault_fixup();
 
-    _abyss_create_items(abyss_genlevel_mask, placed_abyssal_rune);
     setup_environment_effects();
 
     _ensure_player_habitable(true);
+
+    _detect_abyssal_rune();
 
     // Abyss has a constant density.
     env.density = 0;
@@ -1533,6 +1554,7 @@ static void abyss_area_shift()
     // TODO: should dactions be rerun at this point instead? That would cover
     // this particular case...
     gozag_detect_level_gold(false);
+    _detect_abyssal_rune();
 }
 
 void destroy_abyss()
@@ -1616,15 +1638,6 @@ static void _abyss_generate_new_area()
     place_transiting_monsters();
 }
 
-// Check if there is a path between the abyss centre and an exit location.
-static bool _abyss_has_path(const coord_def &to)
-{
-    ASSERT(env.grid(to) == DNGN_EXIT_ABYSS);
-
-    monster_pathfind pf;
-    return pf.init_pathfind(ABYSS_CENTRE, to);
-}
-
 // Generate the initial (proto) Abyss level. The proto Abyss is where
 // the player lands when they arrive in the Abyss from elsewhere.
 // _generate_area generates all other Abyss areas.
@@ -1634,7 +1647,6 @@ void generate_abyss()
     env.level_layout_types.insert("abyss");
     destroy_abyss();
 
-retry:
     _initialize_abyss_state();
 
     dprf(DIAG_ABYSS, "generate_abyss(); turn_on_level: %d",
@@ -1654,19 +1666,14 @@ retry:
     check_map_validity();
 
     // If we're starting out in the Abyss, make sure the starting grid is
-    // an altar to Lugonu and there's an exit near-by.
+    // an exit, and place an altar near by for flavour.
     // Otherwise, we start out on floor and there's a chance there's an
     // altar near-by.
     if (player_in_starting_abyss())
     {
-        env.grid(ABYSS_CENTRE) = DNGN_ALTAR_LUGONU;
-        const coord_def eloc = _place_feature_near(ABYSS_CENTRE, LOS_RADIUS + 2,
-                                                   DNGN_FLOOR, DNGN_EXIT_ABYSS,
-                                                   50, true);
-        // Now make sure there is a path from the abyss centre to the exit.
-        // If for some reason an exit could not be placed, don't bother.
-        if (eloc == INVALID_COORD || !_abyss_has_path(eloc))
-            goto retry;
+        env.grid(ABYSS_CENTRE) = DNGN_EXIT_ABYSS;
+        _place_feature_near(ABYSS_CENTRE, LOS_RADIUS,
+                            DNGN_FLOOR, DNGN_ALTAR_LUGONU, 50);
     }
     else
     {
@@ -1679,6 +1686,7 @@ retry:
     }
 
     setup_environment_effects();
+    _detect_abyssal_rune();
 }
 
 static void _increase_depth()
@@ -1717,30 +1725,30 @@ void abyss_morph()
 
 // Force the player one level deeper in the abyss during an abyss teleport with
 // probability:
-//   (XL + 4 - Depth)^2 / (27^2 * (Depth + 5))
+//   (max(0, XL - Depth))^2 / 27^2 * 3
 //
 // Consequences of this formula:
 // - Chance to be pulled deeper increases with XL and decreases with current
 //   abyss depth.
-// - Characters at XL 1 have about a 0.1% chance of getting pulled from A:1.
+// - Characters won't get pulled to a depth higher than their XL
 // - Characters at XL 13 have chances for getting pulled from A:1/A:2/A:3/A:4
-//   of about 5.9%/4.4%/3.3%/2.6%.
+//   of about 6.6%/5.5%/4.5%/3.7%.
 // - Characters at XL 27 have chances for getting pulled from A:1/A:2/A:3/A:4
-//   of about 20.6%/16.5%/13.4%/11.1%.
+//   of about 31%/28.5%/26.3%/24.1%.
 static bool _abyss_force_descent()
 {
     const int depth = level_id::current().depth;
-    const int xl_factor = you.experience_level + 4 - depth;
-    return x_chance_in_y(xl_factor * xl_factor, 729 * (5 + depth));
+    const int xl_factor = max(0, you.experience_level - depth);
+    return x_chance_in_y(xl_factor * xl_factor, 729 * 3);
 }
 
-void abyss_teleport()
+void abyss_teleport(bool wizard_tele)
 {
     xom_abyss_feature_amusement_check xomcheck;
     dprf(DIAG_ABYSS, "New area Abyss teleport.");
 
     if (level_id::current().depth < brdepth[BRANCH_ABYSS]
-        && _abyss_force_descent())
+        && _abyss_force_descent() && !wizard_tele)
     {
         down_stairs(DNGN_ABYSSAL_STAIR);
         more();
@@ -1765,6 +1773,7 @@ void abyss_teleport()
     vault_list.insert(vault_list.end(),
                         level_vaults.begin(), level_vaults.end());
 
+    _detect_abyssal_rune();
     more();
 }
 
@@ -2319,6 +2328,17 @@ void lugonu_corrupt_level_monster(const monster &who)
 #endif
 }
 
+static void _cleanup_temp_terrain_at(coord_def pos)
+{
+    for (map_marker *mark : env.markers.get_all(MAT_TERRAIN_CHANGE))
+    {
+        map_terrain_change_marker *marker =
+                dynamic_cast<map_terrain_change_marker*>(mark);
+        if (mark->pos == pos)
+            revert_terrain_change(pos, marker->change_type);
+    }
+}
+
 /// If the player has earned enough XP, spawn an exit or stairs down.
 void abyss_maybe_spawn_xp_exit()
 {
@@ -2335,6 +2355,7 @@ void abyss_maybe_spawn_xp_exit()
                         && coinflip()
                         && you.props[ABYSS_SPAWNED_XP_EXIT_KEY].get_bool();
 
+    _cleanup_temp_terrain_at(you.pos());
     destroy_wall(you.pos()); // fires listeners etc even if it wasn't a wall
     env.grid(you.pos()) = stairs ? DNGN_ABYSSAL_STAIR : DNGN_EXIT_ABYSS;
     big_cloud(CLOUD_TLOC_ENERGY, &you, you.pos(), 3 + random2(3), 3, 3);

@@ -9,19 +9,24 @@
 #include "char-set-type.h"
 #include "confirm-prompt-type.h"
 #include "easy-confirm-type.h"
+#include "explore-greedy-options.h"
 #include "feature.h"
 #include "flang-t.h"
 #include "flush-reason-type.h"
+#include "kill-dump-options-type.h"
 #include "lang-t.h"
+#include "level-gen-type.h"
 #include "maybe-bool.h"
 #include "mpr.h"
 #include "newgame-def.h"
 #include "pattern.h"
 #include "screen-mode.h"
 #include "skill-focus-mode.h"
+#include "slot-select-mode.h"
 #include "spell-type.h"
 #include "tag-pref.h"
 #include "travel-open-doors-type.h"
+#include "wizard-option-type.h"
 
 using std::vector;
 
@@ -179,8 +184,7 @@ public:
 
     uint64_t    seed;           // Non-random games.
     uint64_t    seed_from_rc;
-    bool        pregen_dungeon; // Is the dungeon completely generated at the beginning?
-    bool        incremental_pregen; // Does the dungeon always generate in a specified order?
+    level_gen_type pregen_dungeon;
 
 #ifdef DGL_SIMPLE_MESSAGING
     bool        messaging;      // Check for messages.
@@ -189,6 +193,7 @@ public:
     bool        suppress_startup_errors;
 
     bool        mouse_input;
+    bool        menu_arrow_control;
 
     int         view_max_width;
     int         view_max_height;
@@ -223,7 +228,7 @@ public:
     // Whether exclusions and exclusion radius are visible in the viewport.
     bool        always_show_exclusions;
 
-    int         autopickup_on;
+    int         autopickup_on; // can be -1, 0, or 1. XX refactor as enum
     bool        autopickup_starting_ammo;
     bool        default_manual_training;
     bool        default_show_all_skills;
@@ -253,7 +258,6 @@ public:
     bool        note_chat_messages; // log chat in Webtiles
     bool        note_dgl_messages; // log chat in DGL
     easy_confirm_type easy_confirm;    // make yesno() confirming easier
-    bool        easy_quit_item_prompts; // make item prompts quitable on space
     confirm_prompt_type allow_self_target;      // yes, no, prompt
     bool        simple_targeting; // disable smart spell targeting
     bool        always_use_static_spell_targeters; // whether to always use
@@ -273,10 +277,10 @@ public:
     bool        clear_messages;   // clear messages each turn
     bool        show_more;        // Show message-full more prompts.
     bool        small_more;       // Show one-char more prompts.
-    unsigned    friend_brand;     // Attribute for branding friendly monsters
-    unsigned    neutral_brand;    // Attribute for branding neutral monsters
+    unsigned    friend_highlight;     // Attribute for highlighting friendly monsters
+    unsigned    neutral_highlight;    // Attribute for highlighting neutral monsters
     bool        blink_brightens_background; // Assume blink will brighten bg.
-    bool        bold_brightens_foreground; // Assume bold will brighten fg.
+    maybe_bool  bold_brightens_foreground; // Assume bold will brighten fg.
     bool        best_effort_brighten_background; // Allow bg brighten attempts.
     bool        best_effort_brighten_foreground; // Allow fg brighten attempts.
     bool        allow_extended_colours; // Use more than 8 terminal colours.
@@ -303,7 +307,8 @@ public:
     vector<unsigned> fire_order;  // missile search order for 'f' command
     unordered_set<spell_type, hash<int>> fire_order_spell;
     unordered_set<ability_type, hash<int>> fire_order_ability;
-    bool        launcher_autoquiver; // whether to autoquiver launcher ammo on wield
+    bool        quiver_menu_focus;
+    bool        launcher_autoquiver;
 
     unordered_set<int> force_spell_targeter; // spell types to always use a
                                              // targeter for
@@ -318,12 +323,12 @@ public:
     char_set_type  char_set;
     FixedVector<char32_t, NUM_DCHAR_TYPES> char_table;
 
-#ifdef WIZARD
-    int            wiz_mode;      // no, never, start in wiz mode
-    int            explore_mode;  // no, never, start in explore mode
-#endif
+    wizard_option_type wiz_mode;      // no, never, start in wiz mode
+    wizard_option_type explore_mode;  // no, never, start in explore mode
+
     vector<string> terp_files; // Lua files to load for luaterp
     bool           no_save;    // don't use persistent save files
+    bool           no_player_bones;   // don't save player's info in bones files
 
     // internal use only:
     int         sc_entries;      // # of score entries
@@ -385,11 +390,11 @@ public:
     unsigned    detected_item_colour;       // Colour of detected items
     unsigned    status_caption_colour;      // Colour of captions in HUD.
 
-    unsigned    heap_brand;         // Highlight heaps of items
-    unsigned    stab_brand;         // Highlight monsters that are stabbable
-    unsigned    may_stab_brand;     // Highlight potential stab candidates
-    unsigned    feature_item_brand; // Highlight features covered by items.
-    unsigned    trap_item_brand;    // Highlight traps covered by items.
+    unsigned    heap_highlight;         // Highlight heaps of items
+    unsigned    stab_highlight;         // Highlight monsters that are stabbable
+    unsigned    may_stab_highlight;     // Highlight potential stab candidates
+    unsigned    feature_item_highlight; // Highlight features covered by items.
+    unsigned    trap_item_highlight;    // Highlight traps covered by items.
 
     // What is the minimum number of items in a stack for which
     // you show summary (one-line) information
@@ -403,6 +408,8 @@ public:
     vector<text_pattern> explore_stop_pickup_ignore;
 
     bool        explore_greedy;    // Explore goes after items as well.
+
+    int explore_greedy_visit; // Set what type of items explore_greedy visits.
 
     // How much more eager greedy-explore is for items than to explore.
     int         explore_item_greed;
@@ -425,7 +432,7 @@ public:
     vector<menu_sort_condition> sort_menus;
 
     bool        dump_on_save;       // Automatically dump character when saving.
-    int         dump_kill_places;   // How to dump place information for kills.
+    kill_dump_options dump_kill_places;   // How to dump place information for kills.
     int         dump_message_count; // How many old messages to dump
 
     int         dump_item_origins;  // Show where items came from?
@@ -442,7 +449,7 @@ public:
     bool        easy_floor_use;     // , selects the floor item if there's 1
     bool        bad_item_prompt;    // Confirm before using a bad consumable
 
-    int         assign_item_slot;   // How free slots are assigned
+    slot_select_mode assign_item_slot;   // How free slots are assigned
     maybe_bool  show_god_gift;      // Show {god gift} in item names
 
     maybe_bool  restart_after_game; // If true, Crawl will not close on game-end
@@ -587,6 +594,7 @@ public:
     int         tile_window_ratio;
     maybe_bool  tile_use_small_layout;
 #endif
+    int         tile_sidebar_pixels;
     int         tile_cell_pixels;
     int         tile_viewport_scale;
     int         tile_map_scale;
@@ -620,6 +628,7 @@ public:
     bool        tile_level_map_hide_messages;
     bool        tile_level_map_hide_sidebar;
     bool        tile_web_mouse_control;
+    string      tile_web_mobile_input_helper;
 #endif
 #endif // USE_TILE
 
@@ -656,6 +665,7 @@ public:
 
     void write_prefs(FILE *f);
 
+    void reset_aliases(bool clear=true);
 private:
     string unalias(const string &key) const;
     string expand_vars(const string &field) const;
@@ -688,6 +698,7 @@ private:
                          bool prepend = false);
     void do_kill_map(const string &from, const string &to);
     int  read_explore_stop_conditions(const string &) const;
+    int  read_explore_greedy_visit_conditions(const string &) const;
     use_animations_type read_use_animations(const string &) const;
 
     void split_parse(const string &s, const string &separator,
@@ -726,6 +737,6 @@ extern game_options  Options;
 
 static inline short macro_colour(short col)
 {
-    ASSERT(col < NUM_TERM_COLOURS);
+    ASSERTM(col < NUM_TERM_COLOURS, "invalid color %hd", col);
     return col < 0 ? col : Options.colour[ col ];
 }

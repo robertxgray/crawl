@@ -22,6 +22,7 @@
 #include "ray.h"
 #include "spl-damage.h"
 #include "spl-goditem.h" // player_is_debuffable
+#include "spl-monench.h" // mons_simulacrum_immune_reason
 #include "spl-other.h"
 #include "spl-transloc.h"
 #include "stringutil.h"
@@ -34,13 +35,6 @@ static string _wallmsg(coord_def c)
     ASSERT(map_bounds(c)); // there'd be an information leak
     const char *wall = feat_type_name(env.grid(c));
     return "There is " + article_a(wall) + " there.";
-}
-
-static void _copy_explosion_map(explosion_map &source, explosion_map &dest)
-{
-    for (int i = 0; i < source.width(); i++)
-        for (int j = 0; j < source.height(); j++)
-            dest[i][j] = source[i][j];
 }
 
 bool targeter::set_aim(coord_def a)
@@ -83,6 +77,46 @@ bool targeter::anyone_there(coord_def loc)
 bool targeter::affects_monster(const monster_info& /*mon*/)
 {
     return true; //TODO: false
+}
+
+static inline bool _ti_should_iterate(aff_type cur_aff, aff_type threshold)
+{
+    return cur_aff == AFF_NO
+            || threshold != AFF_MAYBE && cur_aff == AFF_MAYBE;
+}
+
+targeting_iterator::targeting_iterator(targeter &t, aff_type _threshold)
+            : rectangle_iterator(t.origin, get_los_radius(), true),
+            tgt(t), threshold(_threshold)
+{
+    if (_ti_should_iterate(is_affected(), threshold))
+        operator ++();
+}
+
+void targeting_iterator::operator ++()
+{
+    // superclass will still iterate if past the end; not sure why,
+    // but mimic that behavior here
+    aff_type cur_aff;
+    do
+    {
+        rectangle_iterator::operator++();
+        cur_aff = is_affected();
+    }
+    while (operator bool() && _ti_should_iterate(cur_aff, threshold));
+}
+
+aff_type targeting_iterator::is_affected()
+{
+    return in_bounds(**this) && operator bool()
+                                        ? tgt.is_affected(**this) : AFF_NO;
+}
+
+// @param threshold AFF_YES: iterate over only AFF_YES squares. AFF_MAYBE:
+//                  iterate over both AFF_YES and AFF_MAYBE squares.
+targeting_iterator targeter::affected_iterator(aff_type threshold)
+{
+    return targeting_iterator(*this, threshold);
 }
 
 // Is the given location a valid endpoint for a Palentonga charge?
@@ -265,7 +299,7 @@ void targeter_beam::set_explosion_aim(bolt tempbeam)
     tempbeam.determine_affected_cells(exp_map_min, coord_def(), 0,
                                       min_expl_rad, true, true);
     if (max_expl_rad == min_expl_rad)
-        _copy_explosion_map(exp_map_min, exp_map_max);
+        exp_map_max = exp_map_min;
     else
     {
         exp_map_max.init(INT_MAX);
@@ -401,66 +435,6 @@ bool targeter_beam::affects_monster(const monster_info& mon)
            || beam.flavour == BEAM_INNER_FLAME;
 }
 
-targeter_unravelling::targeter_unravelling(const actor *act, int r, int pow)
-    : targeter_beam(act, r, ZAP_UNRAVELLING, pow, 1, 1)
-{
-}
-
-/**
- * Will a casting of Violent Unravelling explode a target at the given loc?
- *
- * @param c     The location in question.
- * @return      Whether, to the player's knowledge, there's a valid target for
- *              Violent Unravelling at the given coordinate.
- */
-static bool _unravelling_explodes_at(const coord_def c)
-{
-    if (you.pos() == c && player_is_debuffable())
-        return true;
-
-    const monster_info* mi = env.map_knowledge(c).monsterinfo();
-    return mi && mi->debuffable();
-}
-
-bool targeter_unravelling::set_aim(coord_def a)
-{
-    if (!targeter::set_aim(a))
-        return false;
-
-    bolt tempbeam = beam;
-
-    tempbeam.target = aim;
-    tempbeam.path_taken.clear();
-    tempbeam.fire();
-    path_taken = tempbeam.path_taken;
-
-    bolt explosion_beam = beam;
-    set_explosion_target(beam);
-    if (_unravelling_explodes_at(beam.target))
-        min_expl_rad = 1;
-    else
-        min_expl_rad = 0;
-
-    set_explosion_aim(beam);
-
-    return true;
-}
-
-bool targeter_unravelling::valid_aim(coord_def a)
-{
-    if (!targeter_beam::valid_aim(a))
-        return false;
-
-    const monster* mons = monster_at(a);
-    if (mons && you.can_see(*mons) && !_unravelling_explodes_at(a))
-    {
-        return notify_fail(mons->name(DESC_THE) + " has no enchantments to "
-                           "unravel.");
-    }
-
-    return true;
-}
-
 targeter_view::targeter_view()
 {
     origin = aim = you.pos();
@@ -523,7 +497,7 @@ bool targeter_smite::set_aim(coord_def a)
         beam.determine_affected_cells(exp_map_min, coord_def(), 0,
                                       exp_range_min, true, true);
         if (exp_range_min == exp_range_max)
-            _copy_explosion_map(exp_map_min, exp_map_max);
+            exp_map_max = exp_map_min;
         else
         {
             exp_map_max.init(INT_MAX);
@@ -757,6 +731,100 @@ bool targeter_transference::valid_aim(coord_def a)
     return true;
 }
 
+targeter_inner_flame::targeter_inner_flame(const actor* act, int r) :
+    targeter_smite(act, r, 0, 0, false, nullptr)
+{
+}
+
+bool targeter_inner_flame::valid_aim(coord_def a)
+{
+    if (!targeter_smite::valid_aim(a))
+        return false;
+    return mons_inner_flame_immune_reason(monster_at(a)).empty();
+}
+
+targeter_simulacrum::targeter_simulacrum(const actor* act, int r) :
+    targeter_smite(act, r, 0, 0, false, nullptr)
+{
+}
+
+bool targeter_simulacrum::valid_aim(coord_def a)
+{
+    if (!targeter_smite::valid_aim(a))
+        return false;
+    return mons_simulacrum_immune_reason(monster_at(a)).empty();
+}
+
+targeter_unravelling::targeter_unravelling()
+    : targeter_smite(&you, LOS_RADIUS, 1, 1, false, nullptr)
+{
+}
+
+/**
+ * Will a casting of Violent Unravelling explode a target at the given loc?
+ *
+ * @param c     The location in question.
+ * @return      Whether, to the player's knowledge, there's a valid target for
+ *              Violent Unravelling at the given coordinate.
+ */
+static bool _unravelling_explodes_at(const coord_def c)
+{
+    if (you.pos() == c && player_is_debuffable())
+        return true;
+
+    const monster_info* mi = env.map_knowledge(c).monsterinfo();
+    return mi && mi->unravellable();
+}
+
+bool targeter_unravelling::valid_aim(coord_def a)
+{
+    if (!targeter_smite::valid_aim(a))
+        return false;
+
+    const monster* mons = monster_at(a);
+    if (mons && you.can_see(*mons) && !_unravelling_explodes_at(a))
+    {
+        return notify_fail(mons->name(DESC_THE) + " has no magical effects to "
+                           "unravel.");
+    }
+
+    if (mons && you.can_see(*mons) && _unravelling_explodes_at(a)
+        && god_protects(&you, mons))
+    {
+        return notify_fail(mons->name(DESC_THE) + " is protected by " +
+                           god_name(you.religion) + ".");
+    }
+
+    return true;
+}
+
+bool targeter_unravelling::set_aim(coord_def a)
+{
+    if (!targeter::set_aim(a))
+        return false;
+
+    if (_unravelling_explodes_at(a))
+    {
+        exp_range_min = 1;
+        exp_range_max = 1;
+    }
+    else
+    {
+        exp_range_min = exp_range_max = 0;
+        return false;
+    }
+
+    bolt beam;
+    beam.target = a;
+    beam.use_target_as_pos = true;
+    exp_map_min.init(INT_MAX);
+    beam.determine_affected_cells(exp_map_min, coord_def(), 0,
+                                  exp_range_min, true, true);
+    exp_map_max = exp_map_min;
+
+    return true;
+}
+
 targeter_airstrike::targeter_airstrike()
 {
     agent = &you;
@@ -870,7 +938,7 @@ bool targeter_fragment::set_aim(coord_def a)
             exp_range_min, true, true);
 
     // Min and max ranges are always identical.
-    _copy_explosion_map(exp_map_min, exp_map_max);
+    exp_map_max = exp_map_min;
 
     return true;
 }
@@ -918,18 +986,30 @@ aff_type targeter_reach::is_affected(coord_def loc)
     return AFF_NO;
 }
 
-targeter_cleave::targeter_cleave(const actor* act, coord_def target)
+targeter_cleave::targeter_cleave(const actor* act, coord_def target, int rng)
 {
     ASSERT(act);
     agent = act;
     origin = act->pos();
+    range = rng;
     set_aim(target);
 }
 
 bool targeter_cleave::valid_aim(coord_def a)
 {
-    if ((origin - a).rdist() > 1)
+    const coord_def delta = a - origin;
+    if (delta.rdist() > range)
         return notify_fail("Your weapon can't reach that far!");
+    if (range == 2)
+    {
+        const coord_def first_middle(origin + delta / 2);
+        const coord_def second_middle(a - delta / 2);
+        if (!feat_is_reachable_past(env.grid(first_middle))
+             && !feat_is_reachable_past(env.grid(second_middle)))
+        {
+            return notify_fail("There's something in the way.");
+        }
+    }
     return true;
 }
 
@@ -1541,6 +1621,38 @@ bool targeter_shadow_step::has_additional_sites(coord_def a)
     return temp_sites.size();
 }
 
+aff_type targeter_refrig::is_affected(coord_def loc)
+{
+    if (!targeter_radius::is_affected(loc))
+        return AFF_NO;
+    const actor* act = actor_at(loc);
+    if (!act || act == agent || !agent->can_see(*act))
+        return AFF_NO;
+    if (god_protects(agent, act->as_monster(), true))
+        return AFF_NO;
+
+    int adj = 0;
+    for (adjacent_iterator ai(loc); ai; ++ai)
+    {
+        const actor* adj_act = actor_at(*ai);
+        if (adj_act
+            && agent->can_see(*adj_act)
+            && !mons_is_conjured(adj_act->type))
+        {
+            ++adj;
+        }
+    }
+    switch (adj)
+    {
+    case 0:
+        return AFF_MULTIPLE;
+    case 1:
+        return AFF_YES;
+    default:
+        return AFF_MAYBE;
+    }
+}
+
 targeter_cone::targeter_cone(const actor *act, int r)
 {
     ASSERT(act);
@@ -2135,4 +2247,17 @@ bool targeter_intoxicate::affects_monster(const monster_info& mon)
 {
     return !(mon.mintel < I_HUMAN
              || get_resist(mon.resists(), MR_RES_POISON) >= 3);
+}
+
+targeter_anguish::targeter_anguish()
+    : targeter_multimonster(&you)
+{
+}
+
+bool targeter_anguish::affects_monster(const monster_info& mon)
+{
+    return mon.mintel > I_BRAINLESS
+        && mon.willpower() != WILL_INVULN
+        && !mons_atts_aligned(agent->temp_attitude(), mon.attitude)
+        && !mon.is(MB_ANGUISH);
 }
