@@ -65,7 +65,9 @@ public:
         : _filename(), _file(0), _chunk(0), _ignore_errors(false),
           failed(false)
     {
+#ifndef __ANDROID__
         ASSERT(save);
+#endif
         _chunk = save->writer(chunkname);
     }
 

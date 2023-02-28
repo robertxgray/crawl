@@ -676,7 +676,9 @@ plen_t package::get_chunk_compressed_length(const string &name)
 chunk_writer::chunk_writer(package *parent, const string &_name)
     : first_block(0), cur_block(0), block_len(0)
 {
+#ifndef __ANDROID__
     ASSERT(parent);
+#endif
     ASSERT(!parent->aborted);
 
     // If you need more, please change {read,write}_directory().

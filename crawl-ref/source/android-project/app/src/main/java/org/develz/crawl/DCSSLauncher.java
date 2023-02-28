@@ -33,7 +33,6 @@ public class DCSSLauncher extends AppCompatActivity {
     private void startGame(View v) {
         Intent intent = new Intent(getBaseContext(), DungeonCrawlStoneSoup.class);
         startActivity(intent);
-        finish();
     }
 
     // Reset the init file
