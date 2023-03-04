@@ -34,20 +34,6 @@ jobs:
         uses: gradle/gradle-build-action@v2
         with:
           gradle-version: 7.6 # known to work
-          cache-disabled: true
-      - name: Cache compilation
-        uses: actions/cache@v3
-        with:
-          path: ~/.cache/ccache
-          key: ccache-android-test-asdfgh-${{ github.sha }}
-          restore-keys: |
-            ccache-android-test-asdfgh
-      - name: Setup ccache
-        uses: alexjurkiewicz/setup-ccache@master
-      - name: "Setup ccache: prepend path"
-        run: "echo /usr/lib/ccache >> $GITHUB_PATH"
-      - name: "Setup ccache: update symlinks"
-        run: "/usr/sbin/update-ccache-symlinks"
       - name: "Setup ccache: clear stats"
         run: ccache --zero-stats
       - run: make -j$(nproc) ${{ matrix.build_opts }} android
