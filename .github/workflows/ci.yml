@@ -34,13 +34,14 @@ jobs:
         uses: gradle/gradle-build-action@v2
         with:
           gradle-version: 7.6 # known to work
+          cache-disabled: true
       - name: Cache compilation
         uses: actions/cache@v3
         with:
           path: ~/.cache/ccache
-          key: ccache-android-test-qwerty-${{ github.sha }}
+          key: ccache-android-test-asdfgh-${{ github.sha }}
           restore-keys: |
-            ccache-android-test-qwerty
+            ccache-android-test-asdfgh
       - name: Setup ccache
         uses: alexjurkiewicz/setup-ccache@master
       - name: "Setup ccache: prepend path"
