@@ -18,6 +18,7 @@ jobs:
         build_opts:
           - ANDROID=1
     env:
+      CCACHE_DIR: /home/runner/.cache/ccache
       NDK_CCACHE: ccache
     steps:
       - uses: actions/checkout@v2
@@ -32,23 +33,25 @@ jobs:
         uses: gradle/gradle-build-action@v2
         with:
           gradle-version: 7.5 # known to work
-          cache-disabled: true
+          cache-read-only: false
       - name: Cache compilation
         uses: actions/cache@v3
         with:
-          path: ~/.ccache
+          path: ${{ env.CCACHE_DIR }}
           key: ccache-android-${{ github.sha }}
           restore-keys: |
             ccache-android-
-      - name : Create ccache debug folder
-        run: mkdir -p /tmp/ccache_debug
       - name: Setup ccache
         uses: alexjurkiewicz/setup-ccache@master
         with:
           extra-config: |
             compiler_check = content
-      - name: "Setup ccache: move config file"
-        run: mkdir -p ~/.ccache && mv ~/.ccache.conf ~/.ccache/ccache.conf
+      - name: "Setup ccache: place config file"
+        run: "mkdir -p $CCACHE_DIR && mv ~/.ccache.conf $CCACHE_DIR/ccache.conf"
+      - name: "Setup ccache: prepend path"
+        run: "echo /usr/lib/ccache >> $GITHUB_PATH"
+      - name: "Setup ccache: update symlinks"
+        run: "/usr/sbin/update-ccache-symlinks"
       - name: "Setup ccache: clear stats"
         run: ccache --zero-stats
       - name: Prepare Android build
