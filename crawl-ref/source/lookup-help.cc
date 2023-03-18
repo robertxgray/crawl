@@ -888,6 +888,10 @@ void LookupType::display_keys(vector<string> &key_list) const
         return true;
     };
 
+    // for some reason DescMenu is an InvMenu, so we need to do something to
+    // prevent examine crashes. Just alias it to regular selection.
+    desc_menu.on_examine = desc_menu.on_single_selection;
+
     while (true)
     {
         desc_menu.show();
@@ -1114,7 +1118,10 @@ static int _describe_item(const string &key, const string &suffix,
     {
         const int unrand_idx = extant_unrandart_by_exact_name(item_name);
         if (!unrand_idx)
-            die("Unable to get item %s by name", key.c_str());
+        {
+            mprf(MSGCH_ERROR, "Unable to get item %s by name", key.c_str());
+            return 0;
+        }
         _make_item_fake_unrandart(item, unrand_idx);
     }
     describe_item_popup(item);

@@ -503,7 +503,12 @@ bool UseItemMenu::cycle_headers(bool)
     else
         set_hovered(0);
     // XX this skips `unarmed`, should it?
-    cycle_hover(); // get to a selectable item
+    cycle_hover(); // hover is guaranteed to be a header, get to a selectable item
+#ifdef USE_TILE_WEB
+    // cycle_headers doesn't currently have a client-side
+    // implementation, so force-send the server-side scroll
+    webtiles_update_scroll_pos(true);
+#endif
     return true;
 }
 
@@ -536,7 +541,7 @@ bool UseItemMenu::examine_index(int i)
         auto ie = dynamic_cast<InvEntry *>(items[i]);
         auto desc_tgt = const_cast<item_def*>(ie->item);
         ASSERT(desc_tgt);
-        return describe_item(*desc_tgt);
+        return describe_item(*desc_tgt, nullptr, false);
     }
 }
 
@@ -618,17 +623,17 @@ bool UseItemMenu::process_key(int key)
  *                    function. If it returns false, continue the prompt rather
  *                    than returning null.
  *
- * @return boolean true if something was chosen, false if the process failed and
- *                 no choice was made
+ * @return an operation to apply to the chosen item, OPER_NONE if the menu
+ *         was aborted
  */
-bool use_an_item(item_def *&target, operation_types oper, int item_type,
+operation_types use_an_item(item_def *&target, operation_types oper, int item_type,
                       const char* prompt, function<bool ()> allowcancel)
 {
     UseItemMenu menu(oper, item_type, prompt);
 
     // First bail if there's nothing appropriate to choose in inv or on floor
     if (menu.empty_check())
-        return false;
+        return OPER_NONE;
 
     bool choice_made = false;
     item_def *tmp_tgt = nullptr; // We'll change target only if the player
@@ -699,7 +704,10 @@ bool use_an_item(item_def *&target, operation_types oper, int item_type,
         target = tmp_tgt;
 
     ASSERT(!choice_made || target || menu.oper == OPER_WIELD);
-    return choice_made;
+    if (choice_made)
+        return menu.oper;
+    else
+        return OPER_NONE;
 }
 
 static bool _safe_to_remove_or_wear(const item_def &item, const item_def
@@ -889,6 +897,31 @@ static int _get_item_slot_maybe_with_move(const item_def &item)
         ? item.link : _move_item_from_floor_to_inv(item);
     return ret;
 }
+
+static bool _do_wield_weapon(item_def *to_wield, bool show_weff_messages=true,
+                  bool show_unwield_msg=true, bool show_wield_msg=true,
+                  bool adjust_time_taken=true);
+static bool _do_wear_armour(item_def *to_wear);
+
+
+static bool _equip_item(item_def *to_equip, operation_types o)
+{
+    // TODO: refactor this
+    if (to_equip == nullptr && o == OPER_WIELD)
+        return wield_weapon(true, SLOT_BARE_HANDS);
+
+    ASSERT(to_equip);
+
+    if (o == OPER_WIELD)
+        return _do_wield_weapon(to_equip);
+    else if (o == OPER_WEAR)
+        return _do_wear_armour(to_equip);
+    else if (o == OPER_PUTON)
+        return puton_ring(*to_equip);
+    else
+        return false; // or ASSERT?
+}
+
 /**
  * @param auto_wield false if this was initiated by the wield weapon command (w)
  *      true otherwise (e.g. switching between ranged and melee with the
@@ -933,19 +966,11 @@ bool wield_weapon(bool auto_wield, int slot, bool show_weff_messages,
     // Prompt if not using the auto swap command
         if (!auto_wield)
         {
-            if (!use_an_item(to_wield, OPER_WIELD))
+            operation_types o = use_an_item(to_wield, OPER_WIELD);
+            if (o == OPER_NONE)
                 return false;
-
-    // We abort if trying to wield from the floor with full inventory. We could
-    // try something more sophisticated, e.g., drop the currently held weapon,
-    // but that's surely not always what's wanted, and the problem persists if
-    // the player's hands are empty. For now, let's stick with simple behaviour
-    // over trying to guess what the player would like.
-            if (to_wield && to_wield->pos != ITEM_IN_INVENTORY
-                && !_can_move_item_from_floor_to_inv(*to_wield))
-            {
-                return false;
-            }
+            else if (o != OPER_WIELD)
+                return _equip_item(to_wield, o);
         }
 
     // If autowielding and the swap slot has a bad or invalid item in it, the
@@ -953,11 +978,24 @@ bool wield_weapon(bool auto_wield, int slot, bool show_weff_messages,
         else if (!to_wield->defined() || !item_is_wieldable(*to_wield))
             to_wield = nullptr;
     }
+    return _do_wield_weapon(to_wield, show_weff_messages, show_unwield_msg,
+                                            show_wield_msg, adjust_time_taken);
+}
 
+static bool _do_wield_weapon(item_def *to_wield, bool show_weff_messages,
+                  bool show_unwield_msg, bool show_wield_msg,
+                  bool adjust_time_taken)
+{
     // Reset the warning counter. We do this before the rewield check to
     // provide a (slightly hacky) way to let players reset this without
     // unwielding. (TODO: better ui?)
     you.received_weapon_warning = false;
+
+    if (to_wield && to_wield->pos != ITEM_IN_INVENTORY
+        && !_can_move_item_from_floor_to_inv(*to_wield)) // does messaging
+    {
+        return false;
+    }
 
     if (to_wield && to_wield == you.weapon())
     {
@@ -1441,20 +1479,21 @@ bool wear_armour(int item)
 
     if (item == -1)
     {
-        if (!use_an_item(to_wear, OPER_WEAR))
+        auto o = use_an_item(to_wear, OPER_WEAR);
+        if (o == OPER_NONE)
             return false;
-
-        // use_an_item on armour should never return true and leave to_wear
-        // nullptr
-        if (to_wear->pos != ITEM_IN_INVENTORY
-            && !_can_move_item_from_floor_to_inv(*to_wear))
-        {
-            return false;
-        }
+        else if (o != OPER_WEAR)
+            return _equip_item(to_wear, o);
     }
     else
         to_wear = &you.inv[item];
 
+    return _do_wear_armour(to_wear);
+}
+
+static bool _do_wear_armour(item_def *to_wear)
+{
+    ASSERT(to_wear);
     // First, let's check for any conditions that would make it impossible to
     // equip the given item
     if (!to_wear->defined())
@@ -1466,6 +1505,12 @@ bool wear_armour(int item)
     if (to_wear == you.weapon())
     {
         mpr("You are wielding that object!");
+        return false;
+    }
+
+    if (to_wear->pos != ITEM_IN_INVENTORY
+        && !_can_move_item_from_floor_to_inv(*to_wear)) // does messaging
+    {
         return false;
     }
 
@@ -2342,6 +2387,7 @@ bool puton_ring(item_def &to_puton, bool allow_prompt,
         mpr("You don't have any such object.");
         return false;
     }
+
     if (to_puton.pos != ITEM_IN_INVENTORY
         && !_can_move_item_from_floor_to_inv(to_puton))
     {
@@ -2366,8 +2412,11 @@ bool puton_ring(int slot, bool allow_prompt, bool check_for_inscriptions,
     item_def *to_puton_ptr = nullptr;
     if (slot == -1)
     {
-        if (!use_an_item(to_puton_ptr, OPER_PUTON))
+        auto o = use_an_item(to_puton_ptr, OPER_PUTON);
+        if (o == OPER_NONE)
             return false;
+        else if (o != OPER_PUTON)
+            return _equip_item(to_puton_ptr, o);
     }
     else
         to_puton_ptr = &you.inv[slot];
@@ -2574,8 +2623,14 @@ void drink(item_def* potion)
 
     if (!potion)
     {
-        if (!use_an_item(potion, OPER_QUAFF))
+        if (use_an_item(potion, OPER_QUAFF) == OPER_NONE)
             return;
+        ASSERT(potion);
+        if (potion->base_type == OBJ_SCROLLS)
+        {
+            read(potion);
+            return;
+        }
     }
 
     if (potion->base_type != OBJ_POTIONS)
@@ -2818,9 +2873,8 @@ static item_def* _choose_target_item_for_scroll(bool scroll_known, object_select
                                                 const char* prompt)
 {
     item_def *target = nullptr;
-    bool success = false;
 
-    success = use_an_item(target, OPER_ANY, selector, prompt,
+    auto success = use_an_item(target, OPER_ANY, selector, prompt,
                        [=]()
                        {
                            if (scroll_known
@@ -2831,7 +2885,7 @@ static item_def* _choose_target_item_for_scroll(bool scroll_known, object_select
                            }
                            return false;
                        });
-    return success ? target : nullptr;
+    return success != OPER_NONE ? target : nullptr;
 }
 
 static object_selector _enchant_selector(scroll_type scroll)
@@ -3420,8 +3474,14 @@ void read(item_def* scroll, dist *target)
     if (!scroll && failure_reason.empty())
     {
         // player can currently read, but no scroll was provided
-        if (!use_an_item(scroll, OPER_READ))
+        if (use_an_item(scroll, OPER_READ) == OPER_NONE)
             return;
+        ASSERT(scroll);
+        if (scroll->base_type == OBJ_POTIONS)
+        {
+            drink(scroll);
+            return;
+        }
         failure_reason = cannot_read_item_reason(scroll);
     }
 

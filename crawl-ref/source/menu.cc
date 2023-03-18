@@ -80,7 +80,7 @@
 // |   |                              armour, wield, scroll item selection
 // |   |                              (e.g. brand, enchant)
 // |   |\--KnownMenu (known-items.cc): known/unknown items
-// |   |\--DescMenu (directn.cc): xv and ctrl-x menus
+// |   |\--DescMenu (directn.cc): xv and ctrl-x menus, help lookup
 // |   \---ShopMenu (shopping.cc): buying in shops
 // |
 // |\--ShoppingListMenu (shopping.cc): shopping lists (`$`)
@@ -2827,7 +2827,7 @@ bool Menu::snap_in_page(int index)
 bool Menu::page_down()
 {
     int new_hover = -1;
-    if (is_set(MF_ARROWS_SELECT) && last_hovered < 0)
+    if (is_set(MF_ARROWS_SELECT) && last_hovered < 0 && items.size() > 0)
         last_hovered = 0;
     // preserve relative position
     if (last_hovered >= 0 && in_page(last_hovered))
@@ -2838,7 +2838,7 @@ bool Menu::page_down()
     // don't scroll further if the last item is already visible
     // (TODO: I don't understand why this check is necessary, but without it,
     // you sometimes unpredictably end up with the last element on its own page)
-    if (!in_page(static_cast<int>(items.size()) - 1, true))
+    if (items.size() && !in_page(static_cast<int>(items.size()) - 1, true))
         m_ui.scroller->set_scroll(y+dy);
 
     if (new_hover >= 0)
@@ -2862,7 +2862,7 @@ bool Menu::page_down()
 bool Menu::page_up()
 {
     int new_hover = -1;
-    if (is_set(MF_ARROWS_SELECT) && last_hovered < 0)
+    if (is_set(MF_ARROWS_SELECT) && last_hovered < 0 && items.size() > 0)
         last_hovered = 0;
     if (last_hovered >= 0 && in_page(last_hovered))
         new_hover = last_hovered - get_first_visible(true);
