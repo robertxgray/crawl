@@ -69,7 +69,7 @@ public class DCSSMorgue extends AppCompatActivity
     // Show morgue file
     @Override
     public void onMorgueClick(int position) {
-        Log.e(DCSSLauncher.TAG, "Morgue item selected: " + position);
+        Log.d(DCSSLauncher.TAG, "Morgue item selected: " + position);
         File morgue = adapter.getMorgueFile(position);
         if (morgue != null) {
             Intent intent = new Intent(getBaseContext(), DCSSTextViewer.class);
